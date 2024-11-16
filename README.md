@@ -1,1 +1,1 @@
-# 001-wedding-venue
+# GenAI_cookbook
