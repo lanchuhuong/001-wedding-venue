@@ -3,3 +3,13 @@ notebooks/Planet_information_extraction_RAG.ipynb
 data/
 .DS_Store
 *.pyc
+notebooks/parsing_images.ipynb
+data/raw/Southern California Wedding Venues
+data/processed/adobe_result
+.vscode
+.DS_Store
+.ipynb_checkpoints
+.venv
+__pycache__
+.condaenv
+pdfs
