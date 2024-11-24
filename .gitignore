@@ -1,0 +1,5 @@
+notebooks/emission_text_information_extraction.ipynb
+notebooks/Planet_information_extraction_RAG.ipynb
+data/
+.DS_Store
+*.pyc
