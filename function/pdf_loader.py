@@ -1,23 +1,30 @@
 import json
+import os
 import os.path
 import re
-import sys
 import zipfile
 from datetime import datetime
 
 import pandas as pd
-from adobe.pdfservices.operation.auth.credentials import Credentials
-from adobe.pdfservices.operation.execution_context import ExecutionContext
-from adobe.pdfservices.operation.io.file_ref import FileRef
-from adobe.pdfservices.operation.pdfops.extract_pdf_operation import ExtractPDFOperation
-from adobe.pdfservices.operation.pdfops.options.extractpdf.extract_element_type import (
+from adobe.pdfservices.operation.auth.service_principal_credentials import (
+    ServicePrincipalCredentials,
+)
+from adobe.pdfservices.operation.io.cloud_asset import CloudAsset
+from adobe.pdfservices.operation.io.stream_asset import StreamAsset
+from adobe.pdfservices.operation.pdf_services import PDFServices
+from adobe.pdfservices.operation.pdf_services_media_type import PDFServicesMediaType
+from adobe.pdfservices.operation.pdfjobs.jobs.extract_pdf_job import ExtractPDFJob
+from adobe.pdfservices.operation.pdfjobs.params.extract_pdf.extract_element_type import (
     ExtractElementType,
 )
-from adobe.pdfservices.operation.pdfops.options.extractpdf.extract_pdf_options import (
-    ExtractPDFOptions,
+from adobe.pdfservices.operation.pdfjobs.params.extract_pdf.extract_pdf_params import (
+    ExtractPDFParams,
 )
-from adobe.pdfservices.operation.pdfops.options.extractpdf.extract_renditions_element_type import (
+from adobe.pdfservices.operation.pdfjobs.params.extract_pdf.extract_renditions_element_type import (
     ExtractRenditionsElementType,
+)
+from adobe.pdfservices.operation.pdfjobs.result.extract_pdf_result import (
+    ExtractPDFResult,
 )
 
 
@@ -42,44 +49,54 @@ def get_dict_xlsx(outputzipextract, xlsx_file):
     return data_dict
 
 
+# adopted from: https://github.com/adobe/pdfservices-python-sdk-samples/blob/main/src/extractpdf/extract_text_table_info_with_figures_tables_renditions_from_pdf.py
 def adobeLoader(input_pdf, output_zip_path, client_id, client_secret):
     """
     Function to run adobe API and create output zip file
     """
     # Initial setup, create credentials instance.
-    credentials = (
-        Credentials.service_principal_credentials_builder()
-        .with_client_id(client_id)
-        .with_client_secret(client_secret)
-        .build()
+    with open(input_pdf, "rb") as file:
+        input_stream = file.read()
+
+    # Initial setup, create credentials instance
+    credentials = ServicePrincipalCredentials(
+        client_id=os.getenv("PDF_SERVICES_CLIENT_ID"),
+        client_secret=os.getenv("PDF_SERVICES_CLIENT_SECRET"),
     )
 
-    # Create an ExecutionContext using credentials and create a new operation instance.
-    execution_context = ExecutionContext.create(credentials)
-    extract_pdf_operation = ExtractPDFOperation.create_new()
+    # Creates a PDF Services instance
+    pdf_services = PDFServices(credentials=credentials)
 
-    # Set operation input from a source file.
-    source = FileRef.create_from_local_file(input_pdf)
-    extract_pdf_operation.set_input(source)
-
-    # Build ExtractPDF options and set them into the operation
-    extract_pdf_options: ExtractPDFOptions = (
-        ExtractPDFOptions.builder()
-        .with_elements_to_extract([ExtractElementType.TEXT, ExtractElementType.TABLES])
-        .with_elements_to_extract_renditions(
-            [ExtractRenditionsElementType.TABLES, ExtractRenditionsElementType.FIGURES]
-        )
-        .build()
+    # Creates an asset(s) from source file(s) and upload
+    input_asset = pdf_services.upload(
+        input_stream=input_stream, mime_type=PDFServicesMediaType.PDF
     )
-    extract_pdf_operation.set_options(extract_pdf_options)
 
-    # Execute the operation.
-    result: FileRef = extract_pdf_operation.execute(execution_context)
+    # Create parameters for the job
+    extract_pdf_params = ExtractPDFParams(
+        elements_to_extract=[ExtractElementType.TEXT, ExtractElementType.TABLES],
+        elements_to_extract_renditions=[
+            ExtractRenditionsElementType.TABLES,
+            ExtractRenditionsElementType.FIGURES,
+        ],
+    )
 
-    # Save result to output path
-    if os.path.exists(output_zip_path):
-        os.remove(output_zip_path)
-    result.save_as(output_zip_path)
+    # Creates a new job instance
+    extract_pdf_job = ExtractPDFJob(
+        input_asset=input_asset, extract_pdf_params=extract_pdf_params
+    )
+
+    # Submit the job and gets the job result
+    location = pdf_services.submit(extract_pdf_job)
+    pdf_services_response = pdf_services.get_job_result(location, ExtractPDFResult)
+
+    # Get content from the resulting asset(s)
+    result_asset: CloudAsset = pdf_services_response.get_result().get_resource()
+    stream_asset: StreamAsset = pdf_services.get_content(result_asset)
+
+    # Creates an output stream and copy stream asset's content to it
+    with open(output_zip_path, "wb") as file:
+        file.write(stream_asset.get_input_stream())
 
 
 def extract_text_from_file_adobe(output_zip_path, output_zipextract_folder):
