@@ -7,3 +7,6 @@ Requests==2.32.3
 selenium==4.26.1
 pdfservices-sdk==2.3.1
 openpyxl
+python-dotenv
+opencv-python
+pytesseract
