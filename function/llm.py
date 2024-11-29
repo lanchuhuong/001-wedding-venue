@@ -1,8 +1,8 @@
 import os
-
-from langchain_openai import ChatOpenAI
 from collections.abc import Iterator
+
 from langchain_core.messages import BaseMessageChunk
+from langchain_openai import ChatOpenAI
 
 
 def get_llm_response(
@@ -30,12 +30,11 @@ def get_llm_response(
     # Create the prompt
     system_prompt = """
         You are a helpful assistant for a wedding venue search system. 
-        Use the provided context to answer questions about wedding venues 
-        and related information. 
+        The context provided to you contains information about wedding venues. 
+        Use those contexts to answer user's questions about wedding venues. 
         The provided context contains the text from documents and the 
-        description of images from the document. Consider both to answer 
-        the question.
-        If the information isn't in the context, say so. 
+        description of images from the document. Use both to answer 
+        the question. If the information isn't in the context, say so. 
         Be concise but informative."""
 
     # Start with system prompt
