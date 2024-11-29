@@ -16,7 +16,7 @@ from function.retriever import (
     update_retriever,
 )
 
-load_dotenv()
+load_dotenv(override=True)
 
 chromadb.api.client.SharedSystemClient.clear_system_cache()
 sys.path.append("..")
