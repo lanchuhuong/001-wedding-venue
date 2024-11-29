@@ -40,7 +40,7 @@ def initialize_database() -> Chroma:
 
     chroma_client = chromadb.PersistentClient(
         path=PERSIST_DIRECTORY,
-        settings=Settings(anonymized_telemetry=False, allow_reset=True),
+        # settings=Settings(anonymized_telemetry=False, allow_reset=True),
     )
 
     vectorstore = Chroma(
@@ -70,8 +70,20 @@ def _initialize_retriever(vectorstore: Chroma) -> MultiVectorRetriever:
     store = InMemoryStore()
     id_key = "content_id"
     retriever = MultiVectorRetriever(
-        vectorstore=vectorstore, docstore=store, id_key=id_key, search_kwargs={}
+        vectorstore=vectorstore, docstore=store, id_key=id_key, search_kwargs={"k": 4}
     )
+    # Reconstruct the docstore from vectorstore
+    existing_docs = vectorstore.get()
+    for i, doc_id in enumerate(existing_docs["ids"]):
+        metadata = existing_docs["metadatas"][i]
+        content = existing_docs["documents"][i]
+
+        # Reconstruct the Document object
+        doc = Document(page_content=content, metadata=metadata)
+
+        # Add to docstore using the content_id from metadata
+        if id_key in metadata:
+            store.mset([(metadata[id_key], doc)])
     return retriever
 
 
