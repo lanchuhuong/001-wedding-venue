@@ -18,4 +18,5 @@ Requests==2.31
 scikit_learn==1.5.2
 selenium==4.27.1
 streamlit==1.40.2
-pysqlite3-binary
+setuptools==69.5.1
+pysqlite3==0.5.4
