@@ -2,6 +2,7 @@ import os
 import sys
 
 if sys.modules.get("pysqlite3") is not None:
+    __import__("pysqlite3")
     sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
 
 import chromadb
