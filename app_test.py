@@ -1,8 +1,8 @@
 import os
 import sys
 
-if sys.modules.get("pysqlite3") is not None:
-    sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
+# if sys.modules.get("pysqlite3") is not None:
+#     sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
 
 import chromadb
 import streamlit as st
