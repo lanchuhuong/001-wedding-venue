@@ -13,3 +13,4 @@ data/processed/adobe_result
 __pycache__
 .condaenv
 pdfs
+.env

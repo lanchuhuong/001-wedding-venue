@@ -100,7 +100,6 @@ def extract_text_from_file_adobe(output_zip_path, output_zipextract_folder):
                 # Extract all the contents of the ZIP file to the current working directory
                 zip_ref.extractall(path=output_zipextract_folder)
         except Exception as e:
-
             print("----Error: cannot unzip file:")
             print(e)
 
@@ -114,6 +113,7 @@ def extract_text_from_file_adobe(output_zip_path, output_zipextract_folder):
     except Exception as e:
         print("----Error: cannot open json file")
         print(e)
+        return pd.DataFrame()
 
     # try:
     print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} extract text")
