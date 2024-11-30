@@ -17,6 +17,8 @@ from function.retriever import (
 )
 
 load_dotenv(override=True)
+__import__("pysqlite3")
+sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
 
 chromadb.api.client.SharedSystemClient.clear_system_cache()
 sys.path.append("..")
