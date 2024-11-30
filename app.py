@@ -77,7 +77,7 @@ st.write("Ask questions about weddings and venues!")
 st.write(PERSIST_DIRECTORY)
 
 # Initialize button
-if api_key and st.session_state.retriever is None:
+if os.environ["OPENAI_API_KEY"] and st.session_state.retriever is None:
     initialize_app()
 
 st.title("💬 Chatbot")
