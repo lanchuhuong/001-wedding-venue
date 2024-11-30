@@ -14,7 +14,6 @@ from function.retriever import (
 )
 
 load_dotenv(override=True)
-
 sys.path.append("..")
 
 # Set page config
