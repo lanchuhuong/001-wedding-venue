@@ -1,24 +1,20 @@
 import os
 import sys
 
-import chromadb
 import streamlit as st
-from chromadb.config import Settings
 from dotenv import load_dotenv
 from PIL import Image
 
 from function.llm import get_llm_response
 from function.retriever import (
-    _initialize_retriever,
     check_existing_embeddings,
-    initialize_database,
+    initialize_retriever,
     query_documents,
     update_retriever,
 )
 
 load_dotenv(override=True)
 
-chromadb.api.client.SharedSystemClient.clear_system_cache()
 sys.path.append("..")
 
 # Set page config
@@ -28,23 +24,12 @@ chat_history = []
 # Initialize session state
 if "retriever" not in st.session_state:
     st.session_state.retriever = None
-if "chroma_client" not in st.session_state:
-    st.session_state.chroma_client = None
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-# Configure ChromaDB with persistence
-PERSIST_DIRECTORY = os.path.join(os.getcwd(), "chroma_db")
+# Configure FAISS with persistence
+PERSIST_DIRECTORY = os.path.join(os.getcwd(), "faiss_db")
 os.makedirs(PERSIST_DIRECTORY, exist_ok=True)
-
-
-@st.cache_resource
-def initialize_chroma_client():
-    if st.session_state.chroma_client is None:
-        st.session_state.chroma_client = chromadb.PersistentClient(
-            path=PERSIST_DIRECTORY,
-            settings=Settings(anonymized_telemetry=False, allow_reset=True),
-        )
 
 
 # Center the title using Markdown and CSS
@@ -73,27 +58,19 @@ with st.sidebar:
 
 
 # In your Streamlit initialization
-def initialize_retriever():
-    if st.session_state.retriever is None and api_key:
-        # Initialize ChromaDB client first
-        # initialize_chroma_client()
-        with st.spinner("Initializing retriever..."):
-            try:
-                vectorstore = initialize_database()
-                retriever = _initialize_retriever(vectorstore)
-                update_retriever(retriever)
-                st.session_state.retriever = retriever
-                # st.session_state.retriever = process_multiple_pdfs_to_retriever(
-                #     chroma_client=st.session_state.chroma_client,
-                #     persist_directory=PERSIST_DIRECTORY,
-                # )
+def initialize_app():
+    with st.spinner("Initializing retriever..."):
+        try:
+            retriever = initialize_retriever()
+            update_retriever(retriever)
+            st.session_state.retriever = retriever
 
-                # Check existing embeddings
-                check_existing_embeddings(st.session_state.retriever.vectorstore)
+            # Check existing embeddings
+            check_existing_embeddings(st.session_state.retriever.vectorstore)
 
-                st.success("Retriever initialized successfully!")
-            except Exception as e:
-                raise e
+            st.success("Retriever initialized successfully!")
+        except Exception as e:
+            raise e
 
 
 # Main app layout
@@ -102,7 +79,7 @@ st.write(PERSIST_DIRECTORY)
 
 # Initialize button
 if api_key and st.session_state.retriever is None:
-    initialize_retriever()
+    initialize_app()
 
 st.title("💬 Chatbot")
 if "chat_history" not in st.session_state:
@@ -173,19 +150,19 @@ if query := st.chat_input("Ask about wedding venues..."):
                 st.error(f"Error processing query: {e}")
 
 # Add a reset button in the sidebar to clear the database and chat history
-with st.sidebar:
-    if st.button("Reset Database"):
-        try:
-            if st.session_state.chroma_client:
-                st.session_state.chroma_client.reset()
-            if os.path.exists(PERSIST_DIRECTORY):
-                import shutil
+# with st.sidebar:
+#     if st.button("Reset Database"):
+#         try:
+#             if st.session_state.chroma_client:
+#                 st.session_state.chroma_client.reset()
+#             if os.path.exists(PERSIST_DIRECTORY):
+#                 import shutil
 
-                shutil.rmtree(PERSIST_DIRECTORY)
-            st.session_state.retriever = None
-            st.session_state.chroma_client = None
-            st.session_state.chat_history = []
-            st.success("Database and chat history reset successfully!")
-            st.experimental_rerun()
-        except Exception as e:
-            st.error(f"Error resetting database: {e}")
+#                 shutil.rmtree(PERSIST_DIRECTORY)
+#             st.session_state.retriever = None
+#             st.session_state.chroma_client = None
+#             st.session_state.chat_history = []
+#             st.success("Database and chat history reset successfully!")
+#             st.experimental_rerun()
+#         except Exception as e:
+#             st.error(f"Error resetting database: {e}")
