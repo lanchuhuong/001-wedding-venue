@@ -46,14 +46,14 @@ st.markdown(
     unsafe_allow_html=True,
 )
 # Sidebar for API key
-with st.sidebar:
-    st.title("Settings")
-    if (api_key := os.environ.get("OPENAI_API_KEY")) is None:
-        api_key = st.text_input("Enter OpenAI API Key", type="password")
+# with st.sidebar:
+    # st.title("Settings")
+    # if (api_key := os.environ.get("OPENAI_API_KEY")) is None:
+        # api_key = st.text_input("Enter OpenAI API Key", type="password")
 
-    if api_key:
-        os.environ["OPENAI_API_KEY"] = api_key
-        st.write(os.getenv("OPENAI_API_KEY"))
+    # if api_key:
+        # os.environ["OPENAI_API_KEY"] = api_key
+        # st.write(os.getenv("OPENAI_API_KEY"))
 
 
 # In your Streamlit initialization
