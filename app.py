@@ -45,7 +45,7 @@ st.markdown(
 # Sidebar for API key
 with st.sidebar:
     st.title("Settings")
-    if (api_key := os.environ.get("OPENAI_API_KEY")) is None:
+    if (api_key := os.getenv("OPENAI_API_KEY")) is None:
         api_key = st.text_input("Enter OpenAI API Key", type="password")
 
     if api_key:
