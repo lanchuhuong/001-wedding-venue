@@ -51,7 +51,6 @@ with st.sidebar:
 
     if api_key:
         os.environ["OPENAI_API_KEY"] = api_key
-        st.write(os.getenv("OPENAI_API_KEY"))
 
 
 def initialize_app():

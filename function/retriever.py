@@ -61,9 +61,6 @@ def initialize_database() -> FAISS:
         embedding=embedding_model,
     )
 
-    # Remove the dummy document
-    # vectorstore.delete([0])
-
     # Save to disk
     vectorstore.save_local(PERSIST_DIRECTORY)
     print(f"Created new FAISS index in {PERSIST_DIRECTORY}")
