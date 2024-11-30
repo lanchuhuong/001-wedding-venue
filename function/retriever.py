@@ -2,16 +2,15 @@ import os
 import os.path
 import sys
 import uuid
+from collections import defaultdict
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
-import chromadb
 import matplotlib.pyplot as plt
-from chromadb.config import Settings
 from langchain.retrievers.multi_vector import MultiVectorRetriever
 from langchain.storage import InMemoryStore
-from langchain_chroma import Chroma
+from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
 from PIL import Image
@@ -21,46 +20,64 @@ from function.process_image import generate_image_descriptions
 
 sys.path.append("..")
 
-PERSIST_DIRECTORY: str = "chroma_db"
+PERSIST_DIRECTORY: str = "faiss_db"
 PDF_PATH: Path = Path("data/test_pdf/")
 
+print(os.path.exists(PERSIST_DIRECTORY))
 
-def initialize_database() -> Chroma:
+
+def initialize_database() -> FAISS:
     """
-    Initialize a persistent Chroma database with OpenAI embeddings.
+    Initialize a FAISS database with OpenAI embeddings.
+    Loads from disk if exists, creates new if not.
 
     Returns
     -------
-    Chroma
-        Initialized Chroma vector store instance with OpenAI embeddings.
+    FAISS
+        Initialized FAISS vector store instance with OpenAI embeddings.
     """
     embedding_model = OpenAIEmbeddings(
         model="text-embedding-3-large", api_key=os.getenv("OPENAI_API_KEY")
     )
 
-    chroma_client = chromadb.PersistentClient(
-        path=PERSIST_DIRECTORY,
-        # settings=Settings(anonymized_telemetry=False, allow_reset=True),
+    # Try to load existing index
+    if os.path.exists(PERSIST_DIRECTORY):
+        try:
+            vectorstore = FAISS.load_local(
+                PERSIST_DIRECTORY, embedding_model, allow_dangerous_deserialization=True
+            )
+            print(f"Loaded existing FAISS index from {PERSIST_DIRECTORY}")
+            return vectorstore
+        except Exception as e:
+            print(f"Error loading existing index: {e}")
+
+    # Create new if doesn't exist
+    vectorstore = FAISS.from_documents(
+        documents=[],
+        embedding=embedding_model,
     )
 
-    vectorstore = Chroma(
-        client=chroma_client,
-        collection_name="multimodal_docs",
-        embedding_function=embedding_model,
-        persist_directory=PERSIST_DIRECTORY,
-    )
+    # Save to disk
+    vectorstore.save_local(PERSIST_DIRECTORY)
+    print(f"Created new FAISS index in {PERSIST_DIRECTORY}")
 
     return vectorstore
 
 
-def _initialize_retriever(vectorstore: Chroma) -> MultiVectorRetriever:
+def initialize_retriever() -> MultiVectorRetriever:
+    vectorstore = initialize_database()
+    retriever = _initialize_retriever(vectorstore)
+    return retriever
+
+
+def _initialize_retriever(vectorstore: FAISS) -> MultiVectorRetriever:
     """
     Initialize a MultiVectorRetriever with the given vectorstore.
 
     Parameters
     ----------
-    vectorstore : Chroma
-        The Chroma vectorstore to use for the retriever.
+    vectorstore : FAISS
+        The FAISS vectorstore to use for the retriever.
 
     Returns
     -------
@@ -72,18 +89,11 @@ def _initialize_retriever(vectorstore: Chroma) -> MultiVectorRetriever:
     retriever = MultiVectorRetriever(
         vectorstore=vectorstore, docstore=store, id_key=id_key, search_kwargs={"k": 4}
     )
-    # Reconstruct the docstore from vectorstore
-    existing_docs = vectorstore.get()
-    for i, doc_id in enumerate(existing_docs["ids"]):
-        metadata = existing_docs["metadatas"][i]
-        content = existing_docs["documents"][i]
-
-        # Reconstruct the Document object
-        doc = Document(page_content=content, metadata=metadata)
-
+    existing_docs = [doc for doc in vectorstore.docstore._dict.values()]
+    for doc in existing_docs:
         # Add to docstore using the content_id from metadata
-        if id_key in metadata:
-            store.mset([(metadata[id_key], doc)])
+        if id_key in doc.metadata:
+            store.mset([(doc.metadata[id_key], doc)])
     return retriever
 
 
@@ -118,15 +128,13 @@ def remove_pdfs_from_retriever(
     retriever : MultiVectorRetriever
         The retriever to remove the PDFs from.
     """
-    all_stored_companies = set(
-        _["company"] for _ in retriever.vectorstore.get()["metadatas"]
-    )
-    company_ids = {
-        venue: retriever.vectorstore.get(where={"company": venue})["ids"]
-        for venue in all_stored_companies
-    }
+    company_to_idx_mapping = defaultdict(lambda: [])
+    for idx, doc in retriever.vectorstore.docstore._dict.items():
+        company = doc.metadata["company"]
+        company_to_idx_mapping[company].append(idx)
+
     for pdf in deleted_pdfs:
-        retriever.vectorstore.delete(company_ids[pdf])
+        retriever.vectorstore.delete(company_to_idx_mapping[pdf])
 
 
 def update_retriever(retriever: MultiVectorRetriever) -> None:
@@ -138,9 +146,10 @@ def update_retriever(retriever: MultiVectorRetriever) -> None:
     retriever : MultiVectorRetriever
         The retriever to update.
     """
-    all_stored_companies = set(
-        _["company"] for _ in retriever.vectorstore.get()["metadatas"]
-    )
+    metadatas = [
+        entry.metadata for entry in retriever.vectorstore.docstore._dict.values()
+    ]
+    all_stored_companies = set(_["company"] for _ in metadatas)
 
     all_companies = set(
         path.name.replace(".pdf", "") for path in PDF_PATH.glob("*.pdf")
@@ -151,7 +160,7 @@ def update_retriever(retriever: MultiVectorRetriever) -> None:
 
     add_pdfs_to_retriever(new_pdfs, retriever)
     remove_pdfs_from_retriever(deleted_pdfs, retriever)
-
+    retriever.vectorstore.save_local(PERSIST_DIRECTORY)
     print(f"all pdfs in {PDF_PATH}: {all_companies}")
     print(f"all pdfs in database: {all_stored_companies}")
     print(f"new pdfs: {new_pdfs}")
@@ -338,18 +347,18 @@ def preprocess_documents(pdf_paths: Iterable[str | Path]) -> dict[str, dict[str,
     return new_documents
 
 
-def check_existing_embeddings(vectorstore: Chroma) -> None:
+def check_existing_embeddings(vectorstore: FAISS) -> None:
     """
     Print information about existing embeddings in the vectorstore.
 
     Parameters
     ----------
-    vectorstore : Chroma
+    vectorstore : FAISS
         The vectorstore to check embeddings from.
     """
-    existing_docs = vectorstore.get()
+    existing_docs = vectorstore.docstore._dict.values()
 
-    print(f"Total documents in vectorstore: {len(existing_docs['ids'])}")
+    print(f"Total documents in vectorstore: {len(existing_docs)}")
     print("Existing document companies:")
-    for metadata in existing_docs["metadatas"]:
-        print(f"- {metadata.get('company', 'Unknown')}")
+    for doc in existing_docs:
+        print(f"- ({doc.metadata.get("type")}){doc.metadata.get('company', 'Unknown')}")
