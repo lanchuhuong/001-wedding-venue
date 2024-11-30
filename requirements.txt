@@ -1,4 +1,4 @@
-chromadb==0.3.29
+chromadb==0.5.20
 cleanco==2.3
 langchain==0.3.9
 langchain_chroma==0.1.4
