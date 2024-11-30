@@ -361,4 +361,4 @@ def check_existing_embeddings(vectorstore: FAISS) -> None:
     print(f"Total documents in vectorstore: {len(existing_docs)}")
     print("Existing document companies:")
     for doc in existing_docs:
-        print(f"- ({doc.metadata.get("type")}){doc.metadata.get('company', 'Unknown')}")
+        print(f"- ({doc.metadata.get('type')}){doc.metadata.get('company', 'Unknown')}")
