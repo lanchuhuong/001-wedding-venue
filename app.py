@@ -5,13 +5,14 @@ import streamlit as st
 from dotenv import load_dotenv
 from PIL import Image
 
-from function.llm import get_llm_response
-from function.retriever import (
-    check_existing_embeddings,
-    initialize_retriever,
-    query_documents,
-    update_retriever,
-)
+if os.getenv("OPENAI_API_KEY") is not None:
+    from function.llm import get_llm_response
+    from function.retriever import (
+        check_existing_embeddings,
+        initialize_retriever,
+        query_documents,
+        update_retriever,
+    )
 
 # Set page config
 st.set_page_config(page_title="Chat Document", page_icon="🔍", layout="wide")
