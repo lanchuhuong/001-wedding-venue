@@ -46,14 +46,14 @@ st.markdown(
     unsafe_allow_html=True,
 )
 # Sidebar for API key
-with st.sidebar:
-    st.title("Settings")
-    if (api_key := os.environ.get("OPENAI_API_KEY")) is None:
-        api_key = st.text_input("Enter OpenAI API Key", type="password")
+# with st.sidebar:
+    # st.title("Settings")
+    # if (api_key := os.environ.get("OPENAI_API_KEY")) is None:
+        # api_key = st.text_input("Enter OpenAI API Key", type="password")
 
-    if api_key:
-        os.environ["OPENAI_API_KEY"] = api_key
-        st.write(os.getenv("OPENAI_API_KEY"))
+    # if api_key:
+        # os.environ["OPENAI_API_KEY"] = api_key
+        # st.write(os.getenv("OPENAI_API_KEY"))
 
 
 # In your Streamlit initialization
@@ -77,7 +77,7 @@ st.write("Ask questions about weddings and venues!")
 st.write(PERSIST_DIRECTORY)
 
 # Initialize button
-if api_key and st.session_state.retriever is None:
+if os.environ["OPENAI_API_KEY"] and st.session_state.retriever is None:
     initialize_app()
 
 st.title("💬 Chatbot")
