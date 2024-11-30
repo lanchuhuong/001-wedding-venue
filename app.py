@@ -1,110 +1,168 @@
-# import openai
-# import os
-# import pandas as pd
-# import streamlit as st
-# import streamlit.components.v1 as components
-# import yaml
-# from azure.keyvault.secrets import SecretClient
-# from streamlit_feedback import streamlit_feedback
-# import extra_streamlit_components as stx
-# import tiktoken
+import os
+import sys
+
+import streamlit as st
+from dotenv import load_dotenv
+from PIL import Image
+
+from function.llm import get_llm_response
+from function.retriever import (
+    check_existing_embeddings,
+    initialize_retriever,
+    query_documents,
+    update_retriever,
+)
+
+load_dotenv(override=True)
+
+sys.path.append("..")
+
+# Set page config
+st.set_page_config(page_title="Chat Document", page_icon="🔍", layout="wide")
+
+chat_history = []
+# Initialize session state
+if "retriever" not in st.session_state:
+    st.session_state.retriever = None
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+
+# Configure FAISS with persistence
+PERSIST_DIRECTORY = os.path.join(os.getcwd(), "faiss_db")
+os.makedirs(PERSIST_DIRECTORY, exist_ok=True)
 
 
-# # # loading CSS and HTML
-# # def load_css(file_name="static/css/default.css"):
-# #     with open(file_name) as f:
-# #         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+# Center the title using Markdown and CSS
+st.markdown(
+    """
+    <style>
+        .title {
+            text-align: center;
+            font-size: 36px;
+            font-weight: bold;
+        }
+    </style>
+    <div class="title"> Chat Document 👰 💐</div>
+""",
+    unsafe_allow_html=True,
+)
+# Sidebar for API key
+with st.sidebar:
+    st.title("Settings")
+    if (api_key := os.environ.get("OPENAI_API_KEY")) is None:
+        api_key = st.text_input("Enter OpenAI API Key", type="password")
+
+    if api_key:
+        os.environ["OPENAI_API_KEY"] = api_key
+        st.write(os.getenv("OPENAI_API_KEY"))
 
 
-# # def load_html(file_path):
-# #     with open(file_path, "r", encoding="utf-8") as f:
-# #         html_string = f.read()
-# #     components.html(html_string, height=600)
+# In your Streamlit initialization
+def initialize_app():
+    with st.spinner("Initializing retriever..."):
+        try:
+            retriever = initialize_retriever()
+            update_retriever(retriever)
+            st.session_state.retriever = retriever
+
+            # Check existing embeddings
+            check_existing_embeddings(st.session_state.retriever.vectorstore)
+
+            st.success("Retriever initialized successfully!")
+        except Exception as e:
+            raise e
 
 
-# # def get_manager():
-# #     # Get cookies
-# #     return stx.CookieManager()
+# Main app layout
+st.write("Ask questions about weddings and venues!")
+st.write(PERSIST_DIRECTORY)
+
+# Initialize button
+if api_key and st.session_state.retriever is None:
+    initialize_app()
+
+st.title("💬 Chatbot")
+if "chat_history" not in st.session_state:
+    st.session_state["chat_history"] = [
+        {"role": "assistant", "content": "How can I help you?"}
+    ]
+# Display user message
+for msg in st.session_state.chat_history:
+    st.chat_message(msg["role"]).write(msg["content"])
 
 
-# # # Initialize CookieManager
-# # cookie_manager = get_manager()
+# Query input using chat input
+if query := st.chat_input("Ask about wedding venues..."):
+    if not st.session_state.retriever:
+        st.error("Please initialize the system first!")
+    else:
+        # Add user message to chat history
+        st.session_state.chat_history.append({"role": "user", "content": query})
+        st.chat_message("user").write(query)
 
+        with st.spinner("Searching..."):
+            try:
+                # Get retrieved documents
+                results = query_documents(st.session_state.retriever, query)
 
-# # print(cookie_manager.get_all())
+                # Get LLM response
+                llm_response = get_llm_response(
+                    query, results, st.session_state.chat_history
+                )
 
+                response = st.chat_message("assistant").write_stream(llm_response)
 
-# # def count_token(text):
-# #     return num_tokens_from_string(text, encoding_name="cl100k_base")
+                response = response.encode("utf-8").decode("utf-8")
 
+                # Add assistant response to chat history with supporting docs
+                st.session_state.chat_history.append(
+                    {
+                        "role": "assistant",
+                        "content": response,
+                        "supporting_docs": results,
+                    }
+                )
 
-# # def num_tokens_from_string(string: str, encoding_name: str) -> int:
-# #     """Returns the number of tokens in a text string."""
-# #     encoding = tiktoken.get_encoding(encoding_name)
-# #     num_tokens = len(encoding.encode(string))
-# #     return num_tokens
+                # Display assistant response
+                # st.chat_message("assistant").write(llm_response)
 
+                # Display supporting information in an expander
+                with st.expander("View Supporting Information"):
+                    for doc_id, content in results.items():
+                        st.subheader(f"Results from: {content['company']}")
+                        st.write("🖼️ Images:")
+                        for image_doc in content["images"]:
+                            image_path = image_doc.metadata.get("image_path")
+                            description = image_doc.page_content
+                            # st.write(f"Description: {description}")
+                            if image_path and os.path.exists(image_path):
+                                try:
+                                    image = Image.open(image_path)
+                                    st.image(
+                                        image,
+                                        caption=description,
+                                        use_container_width=True,
+                                    )
+                                except Exception as e:
+                                    st.error(f"Error displaying image: {e}")
 
-# # st.title("Wedding Venue - ChatDocument")
+            except Exception as e:
+                st.error(f"Error processing query: {e}")
 
-# # # Initialize chat history
-# # chat_history = []
-
-
-# # # Initialize session state for variables if they don't exist
-# # if "chat_history" not in st.session_state:
-# #     st.session_state.chat_history = []
-
-# st.title("💬 Chatbot")
-# if "chat_history" not in st.session_state:
-#     st.session_state["chat_history"] = [
-#         {"role": "assistant", "content": "How can I help you?"}
-#     ]
-
-# for msg in st.session_state.chat_history:
-#     st.chat_message(msg["role"]).write(msg["content"])
-
-# if user_input := st.chat_input():
-#     st.session_state.chat_history.append({"role": "user", "content": user_input})
-#     st.chat_message("user").write(user_input)
-
-#     with st.spinner(f"Generating response..."):
+# Add a reset button in the sidebar to clear the database and chat history
+# with st.sidebar:
+#     if st.button("Reset Database"):
 #         try:
-#             if (
-#                 "task_selected" in st.session_state
-#                 and st.session_state["task_selected"]
-#             ):
-#                 response = get_completion_from_messages(
-#                     st.session_state.chat_history,
-#                     context,
-#                     task=st.session_state["task_selected"],
-#                 )
-#             else:
-#                 response = get_completion_from_messages(
-#                     st.session_state.chat_history, context
-#                 )
+#             if st.session_state.chroma_client:
+#                 st.session_state.chroma_client.reset()
+#             if os.path.exists(PERSIST_DIRECTORY):
+#                 import shutil
 
-#         except openai.error.InvalidRequestError as e:
-#             # Check if the error is due to token limit
-#             if "model's maximum context length" in str(e):
-#                 response = "Token limit reached. Please clear the conversation to continue. Please copy any needed information before clearing the session."  # Set a response for the exception case
-#         except ValueError as e:
-#             response = "Oops, I made a mistake. Please try again."
-#         prompt_token_count = count_token(user_input)
-#         st.chat_message("assistant").write(response)
-
-#         # Count tokens for model's output
-#         output_token_count = count_token(response)
-
-#         # Append assistant's response to chat history
-#         st.session_state.chat_history.append({"role": "assistant", "content": response})
-
-# st.markdown(
-#     """
-# <div style='text-align: center; color: #0B5D8E; margin-bottom: 10px;'>
-#     <h4>Your Opinion Matters!</h4>
-#     <p>Please click a face to rate your experience.</p>
-# </div>
-# """,
-#     unsafe_allow_html=True,
-# )
+#                 shutil.rmtree(PERSIST_DIRECTORY)
+#             st.session_state.retriever = None
+#             st.session_state.chroma_client = None
+#             st.session_state.chat_history = []
+#             st.success("Database and chat history reset successfully!")
+#             st.experimental_rerun()
+#         except Exception as e:
+#             st.error(f"Error resetting database: {e}")
