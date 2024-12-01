@@ -5,14 +5,13 @@ import streamlit as st
 from dotenv import load_dotenv
 from PIL import Image
 
-if os.getenv("OPENAI_API_KEY") is not None:
-    from function.llm import get_llm_response
-    from function.retriever import (
-        check_existing_embeddings,
-        initialize_retriever,
-        query_documents,
-        update_retriever,
-    )
+from function.llm import get_llm_response
+from function.retriever import (
+    check_existing_embeddings,
+    initialize_retriever,
+    query_documents,
+    update_retriever,
+)
 
 # Set page config
 st.set_page_config(page_title="Chat Document", page_icon="🔍", layout="wide")
@@ -26,7 +25,8 @@ if "initialized" not in st.session_state:
     st.session_state.initialized = False
 if "supporting_info_sections" not in st.session_state:
     st.session_state.supporting_info_sections = []
-
+if "OPENAI_API_KEY" not in st.session_state:
+    st.session_state.OPENAI_API_KEY = None
 
 # Center the title using Markdown and CSS
 st.markdown(
@@ -46,11 +46,13 @@ st.markdown(
 # Sidebar for API key
 with st.sidebar:
     st.title("Settings")
-    if (api_key := os.getenv("OPENAI_API_KEY")) is None:
+    if st.session_state.OPENAI_API_KEY is None:
+        # if (api_key := os.getenv("OPENAI_API_KEY")) is None:
         api_key = st.text_input("Enter OpenAI API Key", type="password")
-
-    if api_key:
-        os.environ["OPENAI_API_KEY"] = api_key
+        if api_key:
+            st.session_state.OPENAI_API_KEY = api_key
+    # if api_key:
+    # os.environ["OPENAI_API_KEY"] = api_key
 
 
 def initialize_app():
@@ -112,7 +114,7 @@ st.write("Ask questions about weddings and venues!")
 
 # Initialize button
 # if os.environ["OPENAI_API_KEY"] and st.session_state.initialized is False:
-if api_key and st.session_state.initialized is False:
+if st.session_state.OPENAI_API_KEY and st.session_state.initialized is False:
     initialize_app()
 
 st.title("💬 Chatbot")
