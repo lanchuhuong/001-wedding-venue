@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import matplotlib.pyplot as plt
+import streamlit as st
 from langchain.retrievers.multi_vector import MultiVectorRetriever
 from langchain.storage import InMemoryStore
 from langchain_community.vectorstores import FAISS
@@ -38,7 +39,7 @@ def initialize_database() -> FAISS:
         Initialized FAISS vector store instance with OpenAI embeddings.
     """
     embedding_model = OpenAIEmbeddings(
-        model="text-embedding-3-large", api_key=os.getenv("OPENAI_API_KEY")
+        model="text-embedding-3-large", api_key=st.session_state.OPENAI_API_KEY
     )
 
     # Try to load existing index

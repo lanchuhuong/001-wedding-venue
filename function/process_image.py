@@ -169,7 +169,7 @@ def generate_image_descriptions(
     Generate descriptions for images in a directory using OpenAI's API.
     """
     print("Generating image descriptions...")
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    client = OpenAI(api_key=st.session_state.OPENAI_API_KEY)
     image_description = []
 
     if not os.path.isdir(base_dir):
