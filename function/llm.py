@@ -4,6 +4,8 @@ from collections.abc import Iterator
 from langchain_core.messages import BaseMessageChunk
 from langchain_openai import ChatOpenAI
 
+import streamlit as st
+
 
 def get_llm_response(
     query: str, context: dict, chat_history
@@ -12,7 +14,7 @@ def get_llm_response(
     llm = ChatOpenAI(
         model="gpt-4o",
         temperature=0,
-        api_key=os.getenv("OPENAI_API_KEY"),
+        api_key=st.session_state.OPENAI_API_KEY,
         seed=123456,
     )
 
