@@ -6,6 +6,10 @@ on:
       - main
   workflow_dispatch:
 
+env:
+  GCP_PROJECT_ID: ${{ env.GCP_PROJECT_ID }}
+  GCP_SUBSCRIPTION: ${{ env.GCP_SUBSCRIPTION }}
+
 jobs:
   trigger-pipeline:
     runs-on: ubuntu-latest

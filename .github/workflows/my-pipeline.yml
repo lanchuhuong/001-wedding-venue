@@ -1,0 +1,35 @@
+name: Hello World Pipeline
+
+on:
+  workflow_call:
+
+jobs:
+  say-hello:
+    runs-on: ubuntu-latest
+    
+    steps:
+<<<<<<<< HEAD:.github/workflows/my-pipeline.yml
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install google-cloud-storage python-dotenv
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          
+      - name: Run Python script
+        run: python test.py
+========
+      - name: Print Hello World
+        run: echo "Hello World"
+>>>>>>>> 728f5ba (test manual/daily py):.github/my-pipeline.yml

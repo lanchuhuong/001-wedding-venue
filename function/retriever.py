@@ -1,5 +1,4 @@
 import os
-import os.path
 import sys
 import uuid
 from collections import defaultdict
@@ -8,24 +7,23 @@ from pathlib import Path
 from typing import Any
 
 import matplotlib.pyplot as plt
-import streamlit as st
 from langchain.retrievers.multi_vector import MultiVectorRetriever
 from langchain.storage import InMemoryStore
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
 from PIL import Image
-from stqdm import stqdm
+from pydantic import SecretStr
+from tqdm import tqdm
 
 from function.pdf_loader import adobeLoader, extract_text_from_file_adobe
 from function.process_image import generate_image_descriptions
 
 sys.path.append("..")
 
-PERSIST_DIRECTORY: str = os.getenv("DATABASE_DIR")
-PDF_PATH: Path = Path(os.getenv("PDF_DIR"))
-
-# print(os.path.exists(PERSIST_DIRECTORY))
+PERSIST_DIRECTORY: str = os.getenv("DATABASE_DIR", "")
+PDF_PATH: Path = Path(os.getenv("PDF_DIR", ""))
+OPENAI_API_KEY = SecretStr(os.getenv("OPENAI_API_KEY", ""))
 
 
 def initialize_database() -> FAISS:
@@ -39,7 +37,7 @@ def initialize_database() -> FAISS:
         Initialized FAISS vector store instance with OpenAI embeddings.
     """
     embedding_model = OpenAIEmbeddings(
-        model="text-embedding-3-large", api_key=st.session_state.OPENAI_API_KEY
+        model="text-embedding-3-large", api_key=OPENAI_API_KEY
     )
 
     # Try to load existing index
@@ -94,7 +92,7 @@ def _initialize_retriever(vectorstore: FAISS) -> MultiVectorRetriever:
     retriever = MultiVectorRetriever(
         vectorstore=vectorstore, docstore=store, id_key=id_key, search_kwargs={"k": 4}
     )
-    existing_docs = [doc for doc in vectorstore.docstore._dict.values()]
+    existing_docs = [doc for doc in vectorstore.docstore._dict.values()]  # type: ignore
     for doc in existing_docs:
         # Add to docstore using the content_id from metadata
         if id_key in doc.metadata:
@@ -134,7 +132,8 @@ def remove_pdfs_from_retriever(
         The retriever to remove the PDFs from.
     """
     company_to_idx_mapping = defaultdict(lambda: [])
-    for idx, doc in retriever.vectorstore.docstore._dict.items():
+    vectorstore: FAISS = retriever.vectorstore  # type: ignore
+    for idx, doc in vectorstore.docstore._dict.items():  # type: ignore
         company = doc.metadata["company"]
         company_to_idx_mapping[company].append(idx)
 
@@ -151,10 +150,13 @@ def update_retriever(retriever: MultiVectorRetriever) -> None:
     retriever : MultiVectorRetriever
         The retriever to update.
     """
-    metadatas = [
-        entry.metadata for entry in retriever.vectorstore.docstore._dict.values()
+    vectorstore: FAISS = retriever.vectorstore  # type: ignore
+
+    meta_datas = [
+        entry.metadata
+        for entry in vectorstore.docstore._dict.values()  # type: ignore
     ]
-    all_stored_companies = set(_["company"] for _ in metadatas)
+    all_stored_companies = set(_["company"] for _ in meta_datas)
 
     all_companies = set(
         path.name.replace(".pdf", "") for path in PDF_PATH.glob("*.pdf")
@@ -165,7 +167,7 @@ def update_retriever(retriever: MultiVectorRetriever) -> None:
 
     add_pdfs_to_retriever(new_pdfs, retriever)
     remove_pdfs_from_retriever(deleted_pdfs, retriever)
-    retriever.vectorstore.save_local(PERSIST_DIRECTORY)
+    vectorstore.save_local(PERSIST_DIRECTORY)
     if new_pdfs or deleted_pdfs:
         print(f"all pdfs in {PDF_PATH}: {all_companies}")
         print(f"all pdfs in database: {all_stored_companies}")
@@ -309,13 +311,13 @@ def preprocess_documents(pdf_paths: Iterable[str | Path]) -> dict[str, dict[str,
     """
     output_base_zip_path = Path("data/processed/adobe_result/")
     output_base_extract_folder = Path("data/processed/adobe_extracted/")
-    output_goodimages_folder = Path(os.getenv("OUTPUT_IMAGES_DIR"))
+    output_good_images_folder = Path(os.getenv("OUTPUT_IMAGES_DIR", ""))
 
-    output_goodimages_folder.mkdir(exist_ok=True)
+    output_good_images_folder.mkdir(exist_ok=True)
 
     new_documents: dict[str, dict[str, Any]] = {}
 
-    for pdf_path in stqdm(pdf_paths):
+    for pdf_path in tqdm(pdf_paths):
         print(f"processing {pdf_path}")
         pdf_name = os.path.basename(pdf_path).replace(".pdf", "")
         output_zip_path = os.path.join(output_base_zip_path, pdf_name, "sdk.zip")
@@ -342,7 +344,7 @@ def preprocess_documents(pdf_paths: Iterable[str | Path]) -> dict[str, dict[str,
             image_descriptions = []
         else:
             image_descriptions = generate_image_descriptions(
-                base_dir=extracted_figure_folder,
+                base_dir=extracted_figure_folder.as_posix(),
                 pdf_name=pdf_name,
                 output_file=os.path.join(
                     output_base_extract_folder, f"{pdf_name}_descriptions.json"
@@ -371,7 +373,7 @@ def check_existing_embeddings(vectorstore: FAISS) -> None:
     vectorstore : FAISS
         The vectorstore to check embeddings from.
     """
-    existing_docs = vectorstore.docstore._dict.values()
+    existing_docs = [doc for doc in vectorstore.docstore._dict.values()]  # type: ignore
 
     print(f"Total documents in vectorstore: {len(existing_docs)}")
     print("Existing document companies:")
