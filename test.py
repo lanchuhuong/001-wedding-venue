@@ -6,7 +6,9 @@ from dotenv import load_dotenv
 from google.cloud import storage
 from google.cloud.storage import Client, transfer_manager
 
-load_dotenv()
+# Only load .env file if not running in GitHub Actions
+if not os.getenv("GITHUB_ACTIONS"):
+    load_dotenv()
 
 BUCKET_NAME = "wedding-venues-001"
 
@@ -139,4 +141,4 @@ def upload_directory(local_directory: str, bucket_prefix: str = "") -> list[str]
 
 if __name__ == "__main__":
     upload_file("app.py", "app6.py")
-    list_files("app")
+    print(list_files("app"))
