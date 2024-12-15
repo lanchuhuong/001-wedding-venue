@@ -1,12 +1,23 @@
 name: Hello World Pipeline
 
 on:
-  workflow_call:
+  schedule:
+    # This is 3:00 AM Pacific Time (UTC-7/8)
+    - cron: '0 10 * * *'
+  workflow_dispatch:  # Enables manual triggering
 
 jobs:
-  say-hello:
+  run-python-script:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Print Hello World
-        run: echo "Hello World"
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+          
+      - name: Run Python script
+        run: python test.py
