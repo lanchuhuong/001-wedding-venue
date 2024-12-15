@@ -3,7 +3,9 @@ notebooks/Planet_information_extraction_RAG.ipynb
 data/processed
 data/raw
 .DS_Store
+data/
 *.pyc
+*.Zone.Identifier
 notebooks/parsing_images.ipynb
 data/raw/Southern California Wedding Venues
 data/processed/adobe_result
