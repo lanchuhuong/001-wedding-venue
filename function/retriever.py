@@ -8,22 +8,24 @@ from pathlib import Path
 from typing import Any
 
 import matplotlib.pyplot as plt
+import streamlit as st
 from langchain.retrievers.multi_vector import MultiVectorRetriever
 from langchain.storage import InMemoryStore
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
 from PIL import Image
+from stqdm import stqdm
 
 from function.pdf_loader import adobeLoader, extract_text_from_file_adobe
 from function.process_image import generate_image_descriptions
 
 sys.path.append("..")
 
-PERSIST_DIRECTORY: str = "faiss_db"
-PDF_PATH: Path = Path("data/test_pdf/")
+PERSIST_DIRECTORY: str = os.getenv("DATABASE_DIR")
+PDF_PATH: Path = Path(os.getenv("PDF_DIR"))
 
-print(os.path.exists(PERSIST_DIRECTORY))
+# print(os.path.exists(PERSIST_DIRECTORY))
 
 
 def initialize_database() -> FAISS:
@@ -37,7 +39,7 @@ def initialize_database() -> FAISS:
         Initialized FAISS vector store instance with OpenAI embeddings.
     """
     embedding_model = OpenAIEmbeddings(
-        model="text-embedding-3-large", api_key=os.getenv("OPENAI_API_KEY")
+        model="text-embedding-3-large", api_key=st.session_state.OPENAI_API_KEY
     )
 
     # Try to load existing index
@@ -52,8 +54,11 @@ def initialize_database() -> FAISS:
             print(f"Error loading existing index: {e}")
 
     # Create new if doesn't exist
+    dummy_doc = Document(
+        page_content="dummy document", metadata={"company": "dummy", "type": "text"}
+    )
     vectorstore = FAISS.from_documents(
-        documents=[],
+        documents=[dummy_doc],
         embedding=embedding_model,
     )
 
@@ -161,10 +166,11 @@ def update_retriever(retriever: MultiVectorRetriever) -> None:
     add_pdfs_to_retriever(new_pdfs, retriever)
     remove_pdfs_from_retriever(deleted_pdfs, retriever)
     retriever.vectorstore.save_local(PERSIST_DIRECTORY)
-    print(f"all pdfs in {PDF_PATH}: {all_companies}")
-    print(f"all pdfs in database: {all_stored_companies}")
-    print(f"new pdfs: {new_pdfs}")
-    print(f"deleted pdfs: {deleted_pdfs}")
+    if new_pdfs or deleted_pdfs:
+        print(f"all pdfs in {PDF_PATH}: {all_companies}")
+        print(f"all pdfs in database: {all_stored_companies}")
+        print(f"new pdfs: {new_pdfs}")
+        print(f"deleted pdfs: {deleted_pdfs}")
 
 
 def query_documents(
@@ -301,38 +307,47 @@ def preprocess_documents(pdf_paths: Iterable[str | Path]) -> dict[str, dict[str,
         Dictionary containing preprocessed document information including text content
         and image descriptions.
     """
-    output_base_zip_path = "data/processed/adobe_result/"
-    output_base_extract_folder = "data/processed/adobe_extracted/"
-    output_goodimages_folder = "data/processed/good_figures/"
+    output_base_zip_path = Path("data/processed/adobe_result/")
+    output_base_extract_folder = Path("data/processed/adobe_extracted/")
+    output_goodimages_folder = Path(os.getenv("OUTPUT_IMAGES_DIR"))
+
+    output_goodimages_folder.mkdir(exist_ok=True)
 
     new_documents: dict[str, dict[str, Any]] = {}
 
-    for pdf_path in pdf_paths:
+    for pdf_path in stqdm(pdf_paths):
+        print(f"processing {pdf_path}")
         pdf_name = os.path.basename(pdf_path).replace(".pdf", "")
         output_zip_path = os.path.join(output_base_zip_path, pdf_name, "sdk.zip")
         output_zipextract_folder = os.path.join(output_base_extract_folder, pdf_name)
         client_id = os.getenv("ADOBE_CLIENT_ID")
         client_secret = os.getenv("ADOBE_CLIENT_SECRET")
-
-        adobeLoader(
-            pdf_path,
-            output_zip_path=output_zip_path,
-            client_id=client_id,
-            client_secret=client_secret,
-        )
+        if not os.path.exists(
+            os.path.join(output_zipextract_folder, "structuredData.json")
+        ):
+            print(f"loading {pdf_name} to adobe pdf services...")
+            adobeLoader(
+                pdf_path,
+                output_zip_path=output_zip_path,
+                client_id=client_id,
+                client_secret=client_secret,
+            )
         df = extract_text_from_file_adobe(output_zip_path, output_zipextract_folder)
         df["company"] = pdf_name
         text_content = (
             df.groupby("company")["text"].apply(lambda x: "\n".join(x)).reset_index()
         )
-
-        image_descriptions = generate_image_descriptions(
-            base_dir=output_goodimages_folder,
-            pdf_name=pdf_name,
-            output_file=os.path.join(
-                output_base_extract_folder, f"{pdf_name}_descriptions.json"
-            ),
-        )
+        extracted_figure_folder = Path(output_zipextract_folder) / "figures"
+        if not extracted_figure_folder.exists():
+            image_descriptions = []
+        else:
+            image_descriptions = generate_image_descriptions(
+                base_dir=extracted_figure_folder,
+                pdf_name=pdf_name,
+                output_file=os.path.join(
+                    output_base_extract_folder, f"{pdf_name}_descriptions.json"
+                ),
+            )
 
         doc_id = str(uuid.uuid4())
 
@@ -361,4 +376,4 @@ def check_existing_embeddings(vectorstore: FAISS) -> None:
     print(f"Total documents in vectorstore: {len(existing_docs)}")
     print("Existing document companies:")
     for doc in existing_docs:
-        print(f"- ({doc.metadata.get("type")}){doc.metadata.get('company', 'Unknown')}")
+        print(f"- ({doc.metadata.get('type')}){doc.metadata.get('company', 'Unknown')}")

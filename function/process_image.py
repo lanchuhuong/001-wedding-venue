@@ -5,6 +5,7 @@ import functools
 import json
 import os
 import pickle
+import shutil
 import tempfile
 from mimetypes import guess_type
 from pathlib import Path
@@ -14,6 +15,7 @@ import cv2
 import numpy as np
 import pandas as pd
 import pytesseract
+import streamlit as st
 from dotenv import load_dotenv
 from openai import OpenAI
 from PIL import Image
@@ -37,11 +39,13 @@ def load_is_photo_classifier() -> RandomForestClassifier:
 
 
 def image_properties(image_path) -> dict:
-    pil_image = Image.open(image_path)
+    with Image.open(image_path) as pil_image:
+        width, height = pil_image.size
+        total_image_area = width * height
 
-    ocr_data = pytesseract.image_to_data(
-        pil_image, output_type=pytesseract.Output.DATAFRAME
-    )
+        ocr_data = pytesseract.image_to_data(
+            pil_image, output_type=pytesseract.Output.DATAFRAME
+        )
 
     total_text_area = 0
     try:
@@ -54,8 +58,6 @@ def image_properties(image_path) -> dict:
             )
     except Exception:
         pass
-    width, height = pil_image.size
-    total_image_area = width * height
 
     text_density = total_text_area / total_image_area if total_image_area > 0 else 0
 
@@ -96,9 +98,10 @@ def predict_image_quality(model, properties: dict) -> bool:
     return bool(model.predict(X)[0])
 
 
-def is_photo(model, image_path):
+@st.cache_data
+def is_photo(_model, image_path) -> bool:
     properties = image_properties(image_path)
-    return predict_image_quality(model, properties)
+    return predict_image_quality(_model, properties)
 
 
 def resize_image(image_path, max_size=512):
@@ -155,6 +158,7 @@ def local_image_to_data_url(image_path: str) -> str:
     return f"data:{mime_type};base64,{base64_encoded_data}"
 
 
+@st.cache_data
 def generate_image_descriptions(
     base_dir: str,
     pdf_name: str,
@@ -164,19 +168,20 @@ def generate_image_descriptions(
     """
     Generate descriptions for images in a directory using OpenAI's API.
     """
-
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    print("Generating image descriptions...")
+    client = OpenAI(api_key=st.session_state.OPENAI_API_KEY)
     image_description = []
 
-    path = os.path.join(base_dir, pdf_name)
+    if not os.path.isdir(base_dir):
+        raise OSError(f"Directory not found: {base_dir}")
 
-    if not os.path.isdir(path):
-        raise OSError(f"Directory not found: {path}")
-
-    for image_file in os.listdir(path):
-        image_path = os.path.join(path, image_file)
+    # print(os.listdir(base_dir))
+    for i, image_file in enumerate(os.listdir(base_dir)):
+        image_path = os.path.join(base_dir, image_file)
+        print(f"   ({i+1}/{len(os.listdir(base_dir))}) {image_path}")
         photo_classifier = load_is_photo_classifier()
         if not is_photo(photo_classifier, image_path):
+            print(f"skipping {image_path}")
             continue
         temp_image_path = resize_image(image_path)
         try:
@@ -191,8 +196,8 @@ def generate_image_descriptions(
                             {
                                 "type": "text",
                                 "text": """
-                                    You are tasked with summarizing the description of the images. 
-                                    Give a concise summary of the images provided to you. Pay attention to the 
+                                    You are tasked with summarizing the description of the images.
+                                    Give a concise summary of the images provided to you. Pay attention to the
                                     theme. The output should not be more than 30 words. """,
                             },
                             {"type": "image_url", "image_url": {"url": data_url}},
@@ -203,12 +208,18 @@ def generate_image_descriptions(
             )
 
             content = response.choices[0].message.content
-
-            image_description.append({"image_path": image_path, "description": content})
-
+            # content = "test"
         except Exception as e:
             print(f"Error processing image {image_path}: {e}")
             continue
+
+        output_image_dir = Path(os.getenv("OUTPUT_IMAGES_DIR")) / pdf_name
+        output_image_dir.mkdir(exist_ok=True)
+        output_image_path = output_image_dir / image_file
+        shutil.copy(image_path, output_image_path)
+        image_description.append(
+            {"image_path": str(output_image_path), "description": content}
+        )
 
     try:
         with open(output_file, "w") as file:

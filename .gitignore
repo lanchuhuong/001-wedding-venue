@@ -1,6 +1,7 @@
 notebooks/emission_text_information_extraction.ipynb
 notebooks/Planet_information_extraction_RAG.ipynb
-data/
+data/processed
+data/raw
 .DS_Store
 *.pyc
 notebooks/parsing_images.ipynb
