@@ -162,6 +162,7 @@ def extract_text_from_file_adobe(output_zip_path, output_zipextract_folder):
             # print(page)
             df["page_number"] = page
             dfs = pd.concat([dfs, df], axis=0)
+
     except Exception as e:
         print("----Error: processing elements in JSON")
         print(e)
