@@ -1,12 +1,13 @@
-from function.process_image import generate_image_descriptions
 import os
 import uuid
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
+
 from tqdm import tqdm
 
 from function.pdf_loader import adobeLoader, extract_text_from_file_adobe
+from function.process_image import generate_image_descriptions
 
 
 def preprocess_documents(pdf_paths: Iterable[str | Path]) -> dict[str, dict[str, Any]]:
@@ -49,11 +50,13 @@ def preprocess_documents(pdf_paths: Iterable[str | Path]) -> dict[str, dict[str,
                 client_id=client_id,
                 client_secret=client_secret,
             )
-        df = extract_text_from_file_adobe(output_zip_path, output_zipextract_folder)
-        df["company"] = pdf_name
-        text_content = (
-            df.groupby("company")["text"].apply(lambda x: "\n".join(x)).reset_index()
+        text_content = extract_text_from_file_adobe(
+            output_zip_path, output_zipextract_folder
         )
+        # df["company"] = pdf_name
+        # text_content = (
+        #     df.groupby("company")["text"].apply(lambda x: "\n".join(x)).reset_index()
+        # )
         extracted_figure_folder = Path(output_zipextract_folder) / "figures"
         if not extracted_figure_folder.exists():
             image_descriptions = []
@@ -70,7 +73,7 @@ def preprocess_documents(pdf_paths: Iterable[str | Path]) -> dict[str, dict[str,
 
         document_info = {
             "doc_id": doc_id,
-            "text_content": text_content.to_dict("records"),
+            "text_content": text_content,
             "image_descriptions": image_descriptions,
         }
 

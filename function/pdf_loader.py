@@ -185,5 +185,6 @@ def extract_text_from_file_adobe(output_zip_path, output_zipextract_folder):
     # Groupby page
     dfs = dfs.dropna()
     dfs = dfs.groupby("page_number")["text"].apply(lambda x: "\n".join(x)).reset_index()
-    text_content = dfs["text"].apply(lambda x: "\n".join(x)).reset_index()
+    text_content = "\n".join(dfs["text"].values)
+    # text_content = dfs["text"].apply(lambda x: "\n".join(x)).reset_index()
     return text_content

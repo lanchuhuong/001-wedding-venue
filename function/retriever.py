@@ -259,7 +259,7 @@ def add_documents_to_retriever(
         ]
         text_docs = [
             Document(
-                page_content=row["text"],
+                page_content=row,
                 metadata={
                     id_key: text_ids[i],
                     "doc_id": doc_info["doc_id"],
@@ -343,20 +343,19 @@ def preprocess_document(venue: str) -> dict[str, Any]:
         if not extracted_figure_folder.exists():
             print(f"no images found for {venue}.pdf")
             image_descriptions = []
-            return None
         else:
             print(f"generating image descriptions for {venue}.pdf")
             image_descriptions = generate_image_descriptions(
                 base_dir=extracted_figure_folder,
                 venue=venue,
             )
-            doc_id = str(uuid.uuid4())
         print("uploading adobe_extracted_directory to google cloud")
         upload_directory(temp_output_dir, f"/processed/adobe_extracted/{venue}/")
 
+    doc_id = str(uuid.uuid4())
     document_info = {
         "doc_id": doc_id,
-        "text_content": text_content.to_dict("records"),
+        "text_content": text_content,
         "image_descriptions": image_descriptions,
     }
 

@@ -1,35 +1,31 @@
-notebooks/emission_text_information_extraction.ipynb
-notebooks/Planet_information_extraction_RAG.ipynb
-data/processed
-data/raw
+
+__pycache__
+.cache_ggshield
+.condaenv
 .DS_Store
-data/
-*.pyc
-*.Zone.Identifier
-notebooks/parsing_images.ipynb
-data/raw/Southern California Wedding Venues
-data/processed/adobe_result
-.vscode
-.DS_Store
+.env
+.env
 .ipynb_checkpoints
 .venv
-__pycache__
-.condaenv
-pdfs
-.env
-.env
-venues
-venues_
-Southern California Wedding Venues
+.vscode
+*.pyc
+*.Zone.Identifier
+*/turing-guard-444623-s7-2cd0a98f8177.json
 credentials.json
-turing-guard-444623-s7-2cd0a98f8177.json
-turing-guard-444623-s7-2cd0a98f8177.json
-turing-guard-444623-s7-2cd0a98f8177.json
+data/
+data/processed
+data/processed/adobe_result
+data/raw
+data/raw/Southern California Wedding Venues
+notebooks/**/
+notebooks/emission_text_information_extraction.ipynb
+notebooks/parsing_images.ipynb
+notebooks/Planet_information_extraction_RAG.ipynb
 notebooks/processed
 notebooks/The Fifth Rooftop Anaheim/
-*/turing-guard-444623-s7-2cd0a98f8177.json
-turing-guard-444623-s7-2cd0a98f8177.json
+pdfs
 processed/
-.cache_ggshield
-
-notebooks/**/
+Southern California Wedding Venues
+turing-guard-444623-s7-2cd0a98f8177.json
+venues
+venues_
