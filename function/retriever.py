@@ -5,7 +5,7 @@ import uuid
 from collections import defaultdict
 from collections.abc import Iterable
 from pathlib import Path
-from tempfile import NamedTemporaryFile, TemporaryDirectory
+from tempfile import TemporaryDirectory, NamedTemporaryFile
 from typing import Any
 
 import matplotlib.pyplot as plt
