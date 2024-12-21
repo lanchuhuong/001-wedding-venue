@@ -50,18 +50,20 @@ def get_dict_xlsx(outputzipextract, xlsx_file):
 
 
 # adopted from: https://github.com/adobe/pdfservices-python-sdk-samples/blob/main/src/extractpdf/extract_text_table_info_with_figures_tables_renditions_from_pdf.py
-def adobeLoader(input_pdf, output_zip_path, client_id, client_secret):
+def adobeLoader(input_pdf, output_zip_path):
     """
     Function to run adobe API and create output zip file
     """
+    client_id = os.getenv("ADOBE_CLIENT_ID")
+    client_secret = os.getenv("ADOBE_CLIENT_SECRET")
     # Initial setup, create credentials instance.
     with open(input_pdf, "rb") as file:
         input_stream = file.read()
 
     # Initial setup, create credentials instance
     credentials = ServicePrincipalCredentials(
-        client_id=os.getenv("PDF_SERVICES_CLIENT_ID"),
-        client_secret=os.getenv("PDF_SERVICES_CLIENT_SECRET"),
+        client_id=client_id,
+        client_secret=client_secret,
     )
 
     # Creates a PDF Services instance
@@ -171,4 +173,5 @@ def extract_text_from_file_adobe(output_zip_path, output_zipextract_folder):
     # Groupby page
     # dfs = dfs.dropna()
     # dfs = dfs.groupby("page_number")["text"].apply(lambda x: "\n".join(x)).reset_index()
-    return dfs
+    text_content = df["text"].apply(lambda x: "\n".join(x)).reset_index()
+    return text_content
