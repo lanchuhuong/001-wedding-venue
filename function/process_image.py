@@ -161,7 +161,7 @@ def local_image_to_data_url(image_path: str) -> str:
 @st.cache_data
 def generate_image_descriptions(
     base_dir: str,
-    pdf_name: str,
+    venue: str,
     output_file: str = "description.json",
     model: str = "gpt-4o",
 ) -> list[dict[str, str]]:
@@ -213,7 +213,7 @@ def generate_image_descriptions(
             print(f"Error processing image {image_path}: {e}")
             continue
 
-        output_image_dir = Path(os.getenv("OUTPUT_IMAGES_DIR")) / pdf_name
+        output_image_dir = Path(os.getenv("OUTPUT_IMAGES_DIR")) / venue / "figures"
         output_image_dir.mkdir(exist_ok=True)
         output_image_path = output_image_dir / image_file
         shutil.copy(image_path, output_image_path)
