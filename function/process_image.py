@@ -172,13 +172,12 @@ def generate_image_descriptions(
     Generate descriptions for images in a directory using OpenAI's API.
     """
     print("Generating image descriptions...")
-    client = OpenAI(api_key=secrets.OPENAI_API_KEY)
+    client = OpenAI(api_key=secrets.OPENAI_API_KEY.get_secret_value())
     image_description = []
 
     if not os.path.isdir(base_dir):
         raise OSError(f"Directory not found: {base_dir}")
 
-    # print(os.listdir(base_dir))
     for i, image_file in enumerate(os.listdir(base_dir)):
         image_path = os.path.join(base_dir, image_file)
         print(f"   ({i+1}/{len(os.listdir(base_dir))}) {image_path}")
@@ -211,7 +210,6 @@ def generate_image_descriptions(
             )
 
             content = response.choices[0].message.content
-            # content = "test"
         except Exception as e:
             print(f"Error processing image {image_path}: {e}")
             continue
@@ -223,11 +221,5 @@ def generate_image_descriptions(
         image_description.append(
             {"image_path": str(output_image_path), "description": content}
         )
-
-    # try:
-    #     with open(output_file, "w") as file:
-    #         json.dump(image_description, file, indent=4)
-    # except Exception as e:
-    #     print(f"Error saving descriptions to file: {e}")
 
     return image_description

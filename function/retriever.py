@@ -42,7 +42,7 @@ def initialize_database() -> FAISS:
     """
     embedding_model = OpenAIEmbeddings(
         model="text-embedding-3-large",
-        api_key=secrets.OPENAI_API_KEY,
+        api_key=secrets.OPENAI_API_KEY.get_secret_value(),
         # st.session_state.OPENAI_API_KEY
     )
 
@@ -343,6 +343,7 @@ def preprocess_document(venue: str) -> dict[str, Any]:
         if not extracted_figure_folder.exists():
             print(f"no images found for {venue}.pdf")
             image_descriptions = []
+            return None
         else:
             print(f"generating image descriptions for {venue}.pdf")
             image_descriptions = generate_image_descriptions(
