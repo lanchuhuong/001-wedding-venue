@@ -5,7 +5,7 @@ import uuid
 from collections import defaultdict
 from collections.abc import Iterable
 from pathlib import Path
-from tempfile import TemporaryDirectory, NamedTemporaryFile
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 from typing import Any
 
 import matplotlib.pyplot as plt
@@ -20,6 +20,7 @@ from tqdm import tqdm
 from function.cloud import download_file, list_files, upload_directory
 from function.pdf_loader import adobeLoader, extract_text_from_file_adobe
 from function.process_image import generate_image_descriptions
+from function.secrets import secrets
 
 sys.path.append("..")
 
@@ -41,7 +42,7 @@ def initialize_database() -> FAISS:
     """
     embedding_model = OpenAIEmbeddings(
         model="text-embedding-3-large",
-        api_key=os.getenv("OPENAI_API_KEY"),
+        api_key=secrets.OPENAI_API_KEY,
         # st.session_state.OPENAI_API_KEY
     )
 
@@ -329,23 +330,29 @@ def preprocess_document(venue: str) -> dict[str, Any]:
         NamedTemporaryFile(suffix=".zip") as temp_zip_file,
         TemporaryDirectory() as temp_output_dir,
     ):
-        cloud_venue_path = list_files(filter=rf"venues/{venue}.pdf")[0]
+        print(f"searching for {venue}.pdf on google cloud...")
+        cloud_venue_path = list_files(filter=rf"venues/{venue}/.*.pdf")[0]
+        print(f"downloading {venue}.pdf from google cloud...")
         download_file(cloud_venue_path, temp_pdf_file.name)
+        print(f"sending {venue}.pdf to Adobe...")
         adobeLoader(temp_pdf_file.name, temp_zip_file.name)
-        text_content = extract_text_from_file_adobe(
-            temp_zip_file.name, temp_output_dir.name
-        )
-
-        extracted_figure_folder = Path(temp_output_dir.name) / "figures"
+        print("extracting text from pdf...")
+        text_content = extract_text_from_file_adobe(temp_zip_file.name, temp_output_dir)
+        # do the scraping
+        extracted_figure_folder = Path(temp_output_dir) / "figures"
         if not extracted_figure_folder.exists():
+            print(f"no images found for {venue}.pdf")
             image_descriptions = []
         else:
+            print(f"generating image descriptions for {venue}.pdf")
             image_descriptions = generate_image_descriptions(
                 base_dir=extracted_figure_folder,
                 venue=venue,
             )
             doc_id = str(uuid.uuid4())
-        upload_directory(temp_output_dir.name, f"/processed/adobe_extracted/{venue}/")
+        print("uploading adobe_extracted_directory to google cloud")
+        upload_directory(temp_output_dir, f"/processed/adobe_extracted/{venue}/")
+
     document_info = {
         "doc_id": doc_id,
         "text_content": text_content.to_dict("records"),
@@ -353,49 +360,6 @@ def preprocess_document(venue: str) -> dict[str, Any]:
     }
 
     return document_info
-    # output_base_zip_path = Path("data/processed/adobe_result/")
-    # output_base_extract_folder = Path("data/processed/adobe_extracted/")
-    # print(f"processing {pdf_path}")
-    # pdf_name = os.path.basename(pdf_path).replace(".pdf", "")
-    # output_zip_path = os.path.join(output_base_zip_path, pdf_name, "sdk.zip")
-    # output_zipextract_folder = os.path.join(output_base_extract_folder, pdf_name)
-
-    # if not os.path.exists(
-    #     os.path.join(output_zipextract_folder, "structuredData.json")
-    # ):
-    #     print(f"loading {pdf_name} to adobe pdf services...")
-    #     adobeLoader(
-    #         pdf_path,
-    #         output_zip_path=output_zip_path,
-    #         client_id=client_id,
-    #         client_secret=client_secret,
-    #     )
-    # df = extract_text_from_file_adobe(output_zip_path, output_zipextract_folder)
-    # df["company"] = pdf_name
-    # text_content = (
-    #     df.groupby("company")["text"].apply(lambda x: "\n".join(x)).reset_index()
-    # )
-    # extracted_figure_folder = Path(output_zipextract_folder) / "figures"
-    # if not extracted_figure_folder.exists():
-    #     image_descriptions = []
-    # else:
-    #     image_descriptions = generate_image_descriptions(
-    #         base_dir=extracted_figure_folder,
-    #         pdf_name=pdf_name,
-    #         output_file=os.path.join(
-    #             output_base_extract_folder, f"{pdf_name}_descriptions.json"
-    #         ),
-    #     )
-
-    # doc_id = str(uuid.uuid4())
-
-    # document_info = {
-    #     "doc_id": doc_id,
-    #     "text_content": text_content.to_dict("records"),
-    #     "image_descriptions": image_descriptions,
-    # }
-
-    # return document_info
 
 
 def check_existing_embeddings(vectorstore: FAISS) -> None:
