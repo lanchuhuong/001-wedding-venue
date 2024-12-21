@@ -1,9 +1,11 @@
 import os
+import os.path
 import sys
 import uuid
 from collections import defaultdict
 from collections.abc import Iterable
 from pathlib import Path
+from tempfile import TemporaryDirectory, NamedTemporaryFile
 from typing import Any
 
 import matplotlib.pyplot as plt
@@ -13,17 +15,18 @@ from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
 from PIL import Image
-from pydantic import SecretStr
 from tqdm import tqdm
 
+from function.cloud import download_file, list_files, upload_directory
 from function.pdf_loader import adobeLoader, extract_text_from_file_adobe
 from function.process_image import generate_image_descriptions
 
 sys.path.append("..")
 
-PERSIST_DIRECTORY: str = os.getenv("DATABASE_DIR", "")
-PDF_PATH: Path = Path(os.getenv("PDF_DIR", ""))
-OPENAI_API_KEY = SecretStr(os.getenv("OPENAI_API_KEY", ""))
+PERSIST_DIRECTORY: str = os.getenv("DATABASE_DIR")
+PDF_PATH: Path = Path(os.getenv("PDF_DIR"))
+
+# print(os.path.exists(PERSIST_DIRECTORY))
 
 
 def initialize_database() -> FAISS:
@@ -37,7 +40,9 @@ def initialize_database() -> FAISS:
         Initialized FAISS vector store instance with OpenAI embeddings.
     """
     embedding_model = OpenAIEmbeddings(
-        model="text-embedding-3-large", api_key=OPENAI_API_KEY
+        model="text-embedding-3-large",
+        api_key=os.getenv("OPENAI_API_KEY"),
+        # st.session_state.OPENAI_API_KEY
     )
 
     # Try to load existing index
@@ -92,7 +97,7 @@ def _initialize_retriever(vectorstore: FAISS) -> MultiVectorRetriever:
     retriever = MultiVectorRetriever(
         vectorstore=vectorstore, docstore=store, id_key=id_key, search_kwargs={"k": 4}
     )
-    existing_docs = [doc for doc in vectorstore.docstore._dict.values()]  # type: ignore
+    existing_docs = [doc for doc in vectorstore.docstore._dict.values()]
     for doc in existing_docs:
         # Add to docstore using the content_id from metadata
         if id_key in doc.metadata:
@@ -132,8 +137,7 @@ def remove_pdfs_from_retriever(
         The retriever to remove the PDFs from.
     """
     company_to_idx_mapping = defaultdict(lambda: [])
-    vectorstore: FAISS = retriever.vectorstore  # type: ignore
-    for idx, doc in vectorstore.docstore._dict.items():  # type: ignore
+    for idx, doc in retriever.vectorstore.docstore._dict.items():
         company = doc.metadata["company"]
         company_to_idx_mapping[company].append(idx)
 
@@ -150,24 +154,22 @@ def update_retriever(retriever: MultiVectorRetriever) -> None:
     retriever : MultiVectorRetriever
         The retriever to update.
     """
-    vectorstore: FAISS = retriever.vectorstore  # type: ignore
-
-    meta_datas = [
-        entry.metadata
-        for entry in vectorstore.docstore._dict.values()  # type: ignore
+    metadatas = [
+        entry.metadata for entry in retriever.vectorstore.docstore._dict.values()
     ]
-    all_stored_companies = set(_["company"] for _ in meta_datas)
+    all_stored_companies = set(_["company"] for _ in metadatas)
 
     all_companies = set(
         path.name.replace(".pdf", "") for path in PDF_PATH.glob("*.pdf")
     )
+    all_companies = {path.name for path in Path("venues").glob("*")}
 
     new_pdfs = all_companies - all_stored_companies
     deleted_pdfs = all_stored_companies - all_companies
 
     add_pdfs_to_retriever(new_pdfs, retriever)
     remove_pdfs_from_retriever(deleted_pdfs, retriever)
-    vectorstore.save_local(PERSIST_DIRECTORY)
+    retriever.vectorstore.save_local(PERSIST_DIRECTORY)
     if new_pdfs or deleted_pdfs:
         print(f"all pdfs in {PDF_PATH}: {all_companies}")
         print(f"all pdfs in database: {all_stored_companies}")
@@ -294,7 +296,7 @@ def add_documents_to_retriever(
         print(f"Processed document: {pdf_name}")
 
 
-def preprocess_documents(pdf_paths: Iterable[str | Path]) -> dict[str, dict[str, Any]]:
+def preprocess_documents(venues: Iterable[str]) -> dict[str, dict[str, Any]]:
     """
     Preprocess PDFs by extracting text and generating image descriptions.
 
@@ -309,59 +311,91 @@ def preprocess_documents(pdf_paths: Iterable[str | Path]) -> dict[str, dict[str,
         Dictionary containing preprocessed document information including text content
         and image descriptions.
     """
-    output_base_zip_path = Path("data/processed/adobe_result/")
-    output_base_extract_folder = Path("data/processed/adobe_extracted/")
-    output_good_images_folder = Path(os.getenv("OUTPUT_IMAGES_DIR", ""))
-
-    output_good_images_folder.mkdir(exist_ok=True)
 
     new_documents: dict[str, dict[str, Any]] = {}
 
-    for pdf_path in tqdm(pdf_paths):
-        print(f"processing {pdf_path}")
-        pdf_name = os.path.basename(pdf_path).replace(".pdf", "")
-        output_zip_path = os.path.join(output_base_zip_path, pdf_name, "sdk.zip")
-        output_zipextract_folder = os.path.join(output_base_extract_folder, pdf_name)
-        client_id = os.getenv("ADOBE_CLIENT_ID")
-        client_secret = os.getenv("ADOBE_CLIENT_SECRET")
-        if not os.path.exists(
-            os.path.join(output_zipextract_folder, "structuredData.json")
-        ):
-            print(f"loading {pdf_name} to adobe pdf services...")
-            adobeLoader(
-                pdf_path,
-                output_zip_path=output_zip_path,
-                client_id=client_id,
-                client_secret=client_secret,
-            )
-        df = extract_text_from_file_adobe(output_zip_path, output_zipextract_folder)
-        df["company"] = pdf_name
-        text_content = (
-            df.groupby("company")["text"].apply(lambda x: "\n".join(x)).reset_index()
+    for venue in tqdm(venues):
+        is_processed = len(list_files(filter=rf"/{venue}/structuredData.json")) > 0
+        if not is_processed:
+            document_info = preprocess_document(venue)
+            new_documents[venue] = document_info
+
+    return new_documents
+
+
+def preprocess_document(venue: str) -> dict[str, Any]:
+    with (
+        NamedTemporaryFile(suffix=".pdf") as temp_pdf_file,
+        NamedTemporaryFile(suffix=".zip") as temp_zip_file,
+        TemporaryDirectory() as temp_output_dir,
+    ):
+        cloud_venue_path = list_files(filter=rf"venues/{venue}.pdf")[0]
+        download_file(cloud_venue_path, temp_pdf_file.name)
+        adobeLoader(temp_pdf_file.name, temp_zip_file.name)
+        text_content = extract_text_from_file_adobe(
+            temp_zip_file.name, temp_output_dir.name
         )
-        extracted_figure_folder = Path(output_zipextract_folder) / "figures"
+
+        extracted_figure_folder = Path(temp_output_dir.name) / "figures"
         if not extracted_figure_folder.exists():
             image_descriptions = []
         else:
             image_descriptions = generate_image_descriptions(
-                base_dir=extracted_figure_folder.as_posix(),
-                pdf_name=pdf_name,
-                output_file=os.path.join(
-                    output_base_extract_folder, f"{pdf_name}_descriptions.json"
-                ),
+                base_dir=extracted_figure_folder,
+                venue=venue,
             )
+            doc_id = str(uuid.uuid4())
+        upload_directory(temp_output_dir.name, f"/processed/adobe_extracted/{venue}/")
+    document_info = {
+        "doc_id": doc_id,
+        "text_content": text_content.to_dict("records"),
+        "image_descriptions": image_descriptions,
+    }
 
-        doc_id = str(uuid.uuid4())
+    return document_info
+    # output_base_zip_path = Path("data/processed/adobe_result/")
+    # output_base_extract_folder = Path("data/processed/adobe_extracted/")
+    # print(f"processing {pdf_path}")
+    # pdf_name = os.path.basename(pdf_path).replace(".pdf", "")
+    # output_zip_path = os.path.join(output_base_zip_path, pdf_name, "sdk.zip")
+    # output_zipextract_folder = os.path.join(output_base_extract_folder, pdf_name)
 
-        document_info = {
-            "doc_id": doc_id,
-            "text_content": text_content.to_dict("records"),
-            "image_descriptions": image_descriptions,
-        }
+    # if not os.path.exists(
+    #     os.path.join(output_zipextract_folder, "structuredData.json")
+    # ):
+    #     print(f"loading {pdf_name} to adobe pdf services...")
+    #     adobeLoader(
+    #         pdf_path,
+    #         output_zip_path=output_zip_path,
+    #         client_id=client_id,
+    #         client_secret=client_secret,
+    #     )
+    # df = extract_text_from_file_adobe(output_zip_path, output_zipextract_folder)
+    # df["company"] = pdf_name
+    # text_content = (
+    #     df.groupby("company")["text"].apply(lambda x: "\n".join(x)).reset_index()
+    # )
+    # extracted_figure_folder = Path(output_zipextract_folder) / "figures"
+    # if not extracted_figure_folder.exists():
+    #     image_descriptions = []
+    # else:
+    #     image_descriptions = generate_image_descriptions(
+    #         base_dir=extracted_figure_folder,
+    #         pdf_name=pdf_name,
+    #         output_file=os.path.join(
+    #             output_base_extract_folder, f"{pdf_name}_descriptions.json"
+    #         ),
+    #     )
 
-        new_documents[pdf_name] = document_info
+    # doc_id = str(uuid.uuid4())
 
-    return new_documents
+    # document_info = {
+    #     "doc_id": doc_id,
+    #     "text_content": text_content.to_dict("records"),
+    #     "image_descriptions": image_descriptions,
+    # }
+
+    # return document_info
 
 
 def check_existing_embeddings(vectorstore: FAISS) -> None:
@@ -373,7 +407,7 @@ def check_existing_embeddings(vectorstore: FAISS) -> None:
     vectorstore : FAISS
         The vectorstore to check embeddings from.
     """
-    existing_docs = [doc for doc in vectorstore.docstore._dict.values()]  # type: ignore
+    existing_docs = vectorstore.docstore._dict.values()
 
     print(f"Total documents in vectorstore: {len(existing_docs)}")
     print("Existing document companies:")
