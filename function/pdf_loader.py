@@ -26,6 +26,7 @@ from adobe.pdfservices.operation.pdfjobs.params.extract_pdf.extract_renditions_e
 from adobe.pdfservices.operation.pdfjobs.result.extract_pdf_result import (
     ExtractPDFResult,
 )
+from pydantic import SecretStr
 
 
 def get_dict_xlsx(outputzipextract, xlsx_file):
@@ -47,6 +48,17 @@ def get_dict_xlsx(outputzipextract, xlsx_file):
     data_dict = df.to_dict(orient="records")
 
     return data_dict
+
+
+class Secrets:
+    def __getattribute__(self, name: str) -> SecretStr:
+        secret = os.getenv(name)
+        if secret is None:
+            raise ValueError(f"Secret {name} not found in environment variables")
+        return SecretStr(secret)
+
+
+secrets = Secrets()
 
 
 # adopted from: https://github.com/adobe/pdfservices-python-sdk-samples/blob/main/src/extractpdf/extract_text_table_info_with_figures_tables_renditions_from_pdf.py
@@ -173,5 +185,5 @@ def extract_text_from_file_adobe(output_zip_path, output_zipextract_folder):
     # Groupby page
     # dfs = dfs.dropna()
     # dfs = dfs.groupby("page_number")["text"].apply(lambda x: "\n".join(x)).reset_index()
-    text_content = df["text"].apply(lambda x: "\n".join(x)).reset_index()
+    text_content = dfs["text"].apply(lambda x: "\n".join(x)).reset_index()
     return text_content

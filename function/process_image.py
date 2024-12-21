@@ -21,6 +21,8 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from PIL import Image
 
+from function.secrets import secrets
+
 if TYPE_CHECKING:
     from sklearn.ensemble import RandomForestClassifier
 
@@ -170,7 +172,7 @@ def generate_image_descriptions(
     Generate descriptions for images in a directory using OpenAI's API.
     """
     print("Generating image descriptions...")
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    client = OpenAI(api_key=secrets.OPENAI_API_KEY)
     image_description = []
 
     if not os.path.isdir(base_dir):
