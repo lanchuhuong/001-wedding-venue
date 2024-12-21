@@ -15,7 +15,8 @@ import cv2
 import numpy as np
 import pandas as pd
 import pytesseract
-import streamlit as st
+
+# import streamlit as st
 from dotenv import load_dotenv
 from openai import OpenAI
 from PIL import Image
@@ -98,7 +99,7 @@ def predict_image_quality(model, properties: dict) -> bool:
     return bool(model.predict(X)[0])
 
 
-@st.cache_data
+# @st.cache_data
 def is_photo(_model, image_path) -> bool:
     properties = image_properties(image_path)
     return predict_image_quality(_model, properties)
@@ -158,18 +159,18 @@ def local_image_to_data_url(image_path: str) -> str:
     return f"data:{mime_type};base64,{base64_encoded_data}"
 
 
-@st.cache_data
+# @st.cache_data
 def generate_image_descriptions(
     base_dir: str,
     venue: str,
-    output_file: str = "description.json",
+    # output_file: str = "description.json",
     model: str = "gpt-4o",
 ) -> list[dict[str, str]]:
     """
     Generate descriptions for images in a directory using OpenAI's API.
     """
     print("Generating image descriptions...")
-    client = OpenAI(api_key=st.session_state.OPENAI_API_KEY)
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     image_description = []
 
     if not os.path.isdir(base_dir):
@@ -213,7 +214,7 @@ def generate_image_descriptions(
             print(f"Error processing image {image_path}: {e}")
             continue
 
-        output_image_dir = Path(os.getenv("OUTPUT_IMAGES_DIR")) / venue / "figures"
+        output_image_dir = Path(os.getenv("OUTPUT_IMAGES_DIR")) / venue
         output_image_dir.mkdir(exist_ok=True)
         output_image_path = output_image_dir / image_file
         shutil.copy(image_path, output_image_path)
@@ -221,10 +222,10 @@ def generate_image_descriptions(
             {"image_path": str(output_image_path), "description": content}
         )
 
-    try:
-        with open(output_file, "w") as file:
-            json.dump(image_description, file, indent=4)
-    except Exception as e:
-        print(f"Error saving descriptions to file: {e}")
+    # try:
+    #     with open(output_file, "w") as file:
+    #         json.dump(image_description, file, indent=4)
+    # except Exception as e:
+    #     print(f"Error saving descriptions to file: {e}")
 
     return image_description
