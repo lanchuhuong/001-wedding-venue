@@ -158,7 +158,9 @@ def process_venues_and_photos(bucket_name):
                 image_content = downloader.get_image(url)
                 if image_content:
                     filename = get_filename_from_url(url, photo_col)
-                    gcs_path = f"processed/{venue_name}/figures/{filename}"
+                    gcs_path = (
+                        f"processed/adobe_extracted/{venue_name}/figures/{filename}"
+                    )
 
                     try:
                         blob = bucket.blob(gcs_path)
