@@ -12,6 +12,7 @@ from typing import Any, Dict
 import matplotlib.pyplot as plt
 import pandas as pd
 from dotenv import find_dotenv, load_dotenv
+from dotenv import find_dotenv
 from google.cloud import storage
 from langchain.retrievers.multi_vector import MultiVectorRetriever
 from langchain.storage import InMemoryStore
@@ -27,6 +28,7 @@ from function.cloud import (
     list_files,
     upload_directory,
     upload_file,
+    upload_files,
 )
 from function.pdf_loader import adobeLoader, extract_text_from_file_adobe
 from function.process_image import generate_image_descriptions
@@ -34,9 +36,58 @@ from function.secrets import secrets
 
 load_dotenv(override=True)
 
-PROJECT_ROOT = os.path.dirname(find_dotenv())
-PERSIST_DIRECTORY: str = os.path.join(PROJECT_ROOT, os.getenv("DATABASE_DIR"))
-PDF_PATH: Path = Path(os.path.join(PROJECT_ROOT, os.getenv("PDF_DIR")))
+path = find_dotenv()
+PROJECT_ROOT = os.path.dirname(path)
+PERSIST_DIRECTORY = os.path.join(PROJECT_ROOT, os.getenv("DATABASE_DIR"))
+PDF_PATH: Path = Path(PROJECT_ROOT) / Path(os.getenv("PDF_DIR"))
+
+bucket_name = "wedding-venues-001"
+storage_client = storage.Client()
+bucket = storage_client.bucket(bucket_name)
+
+
+def download_faiss_from_cloud(cloud_path: str, local_path: str):
+    """
+    Downloads the FAISS directory from the cloud storage using the `download_files` function.
+
+    Parameters:
+        cloud_path (str): Path in the cloud storage where FAISS is stored (e.g., 'faiss_db').
+        local_path (str): Local directory to save the downloaded FAISS database.
+    """
+
+    download_file(
+        "faiss_db/index.faiss", os.path.join(PERSIST_DIRECTORY, "index.faiss")
+    )
+    download_file("faiss_db/index.pkl", os.path.join(PERSIST_DIRECTORY, "index.pkl"))
+
+    print(f"Downloaded {2} files from '{cloud_path}' to {PERSIST_DIRECTORY}")
+    # return results
+
+
+def upload_faiss_to_cloud(local_path: str, cloud_path: str):
+    """
+    Uploads the FAISS directory to the cloud storage using the `upload_files` function.
+
+    Parameters:
+        local_path (str): Path to the local directory containing FAISS files (e.g., 'faiss_db').
+        cloud_path (str): Path in the cloud storage where FAISS will be stored (e.g., 'faiss_db').
+    """
+    # Recursively gather all files from the local directory
+    all_files = [
+        (
+            os.path.join(root, file),
+            os.path.join(
+                cloud_path, os.path.relpath(os.path.join(root, file), local_path)
+            ),
+        )
+        for root, _, files in os.walk(local_path)
+        for file in files
+    ]
+
+    cloud_url = upload_files(all_files)
+
+    print(f"Uploaded {len(cloud_url)} files from '{local_path}' to '{cloud_path}'")
+    return cloud_url
 
 
 def initialize_database() -> FAISS:
@@ -52,34 +103,19 @@ def initialize_database() -> FAISS:
     embedding_model = OpenAIEmbeddings(
         model="text-embedding-3-large",
         api_key=secrets.OPENAI_API_KEY.get_secret_value(),
-        # st.session_state.OPENAI_API_KEY
     )
-
-    # Try to load existing index
-    if os.path.exists(PERSIST_DIRECTORY):
-        try:
-            vectorstore = FAISS.load_local(
-                PERSIST_DIRECTORY, embedding_model, allow_dangerous_deserialization=True
-            )
-            print(f"Loaded existing FAISS index from {PERSIST_DIRECTORY}")
-            return vectorstore
-        except Exception as e:
-            print(f"Error loading existing index: {e}")
-
-    # Create new if doesn't exist
-    dummy_doc = Document(
-        page_content="dummy document", metadata={"company": "dummy", "type": "text"}
-    )
-    vectorstore = FAISS.from_documents(
-        documents=[dummy_doc],
-        embedding=embedding_model,
-    )
-
-    # Save to disk
-    vectorstore.save_local(PERSIST_DIRECTORY)
-    print(f"Created new FAISS index in {PERSIST_DIRECTORY}")
-
-    return vectorstore
+    # if not os.path.exists(PERSIST_DIRECTORY):
+    print("Fetching database from the cloud...")
+    download_faiss_from_cloud(bucket.blob("faiss_db"), PERSIST_DIRECTORY)
+    # Try to load
+    try:
+        vectorstore = FAISS.load_local(
+            PERSIST_DIRECTORY, embedding_model, allow_dangerous_deserialization=True
+        )
+        print(f"Loaded FAISS index from {PERSIST_DIRECTORY}")
+        return vectorstore
+    except Exception as e:
+        print(f"Error loading existing index: {e}")
 
 
 def initialize_retriever() -> MultiVectorRetriever:
@@ -105,7 +141,7 @@ def _initialize_retriever(vectorstore: FAISS) -> MultiVectorRetriever:
     store = InMemoryStore()
     id_key = "content_id"
     retriever = MultiVectorRetriever(
-        vectorstore=vectorstore, docstore=store, id_key=id_key, search_kwargs={"k": 4}
+        vectorstore=vectorstore, docstore=store, id_key=id_key, search_kwargs={"k": 7}
     )
     existing_docs = [doc for doc in vectorstore.docstore._dict.values()]
     for doc in existing_docs:
@@ -116,7 +152,7 @@ def _initialize_retriever(vectorstore: FAISS) -> MultiVectorRetriever:
 
 
 def add_pdfs_to_retriever(
-    pdfs: Iterable[str | Path], retriever: MultiVectorRetriever
+    pdfs: Iterable[str | Path], retriever: MultiVectorRetriever, venue_metadata
 ) -> None:
     """
     Add PDFs to the retriever by processing and embedding their content.
@@ -129,8 +165,8 @@ def add_pdfs_to_retriever(
         The retriever to add the processed PDFs to.
     """
     pdf_paths = [PDF_PATH / f"{pdf}.pdf" for pdf in pdfs]
-    doc_infos = preprocess_documents(pdf_paths)
-    add_documents_to_retriever(doc_infos, retriever)
+    doc_infos = preprocess_documents(pdf_paths, venue_metadata)
+    add_documents_to_retriever(doc_infos, retriever, venue_metadata)
 
 
 def remove_pdfs_from_retriever(
@@ -162,7 +198,7 @@ def get_all_venue_names_on_cloud():
     return venue_names
 
 
-def update_retriever(retriever: MultiVectorRetriever) -> None:
+def update_retriever(retriever: MultiVectorRetriever, venue_metadata) -> None:
     """
     Update the retriever by adding new PDFs and removing deleted ones.
 
@@ -181,8 +217,8 @@ def update_retriever(retriever: MultiVectorRetriever) -> None:
     new_pdfs = all_companies - all_stored_companies
     deleted_pdfs = all_stored_companies - all_companies
 
-    add_pdfs_to_retriever(new_pdfs, retriever)
-    remove_pdfs_from_retriever(deleted_pdfs, retriever)
+    add_pdfs_to_retriever(new_pdfs, retriever, venue_metadata)
+    # remove_pdfs_from_retriever(deleted_pdfs, retriever)
     retriever.vectorstore.save_local(PERSIST_DIRECTORY)
     if new_pdfs or deleted_pdfs:
         print(f"all pdfs in {PDF_PATH}: {all_companies}")
@@ -209,11 +245,18 @@ def query_documents(
     Dict[str, Dict[str, List[Document]]]
         Dictionary containing query results organized by document ID.
     """
-    similar_docs = retriever.invoke(query)
-    print(f"similar document: {similar_docs}")
-    results: dict[str, dict[str, Any]] = {}
+    vectorstore = retriever.vectorstore
+    similar_docs_with_score = vectorstore.similarity_search_with_score(query, k=7)
 
-    for doc in similar_docs:
+    # similar_docs = retriever.invoke(query)
+    # print(f"similar document: {similar_docs}")
+    results: dict[str, dict[str, Any]] = {}
+    score_threshold = 0.7
+    for doc, score in similar_docs_with_score:
+        print(f"doc_id: {doc.metadata['doc_id']}, score: {score}")
+
+        if score < score_threshold:
+            continue
         doc_id = doc.metadata["doc_id"]
         if doc_id not in results:
             results[doc_id] = {
@@ -227,25 +270,20 @@ def query_documents(
         else:
             results[doc_id]["images"].append(doc)
 
-    for doc_id, content in results.items():
-        print(f"Company: {content['company']}")
-
-        for text_doc in content["text"]:
-            print(f"Text: {text_doc.page_content}\n")
-
-        for image_doc in content["images"]:
-            image_path = image_doc.metadata.get("image_path")
-            description = image_doc.page_content
-            print(f"Image Description: {description}")
-            if image_path:
-                try:
-                    im = Image.open(image_path)
-                    plt.figure(figsize=(10, 8))
-                    plt.imshow(im)
-                    plt.axis("off")
-                    plt.show()
-                except Exception as e:
-                    print(f"Error displaying image: {e}")
+    # for doc_id, content in results.items():
+    #     for image_doc in content["images"]:
+    #         image_path = image_doc.metadata.get("image_path")
+    #         # description = image_doc.page_content
+    # print(f"Image Description: {description}")
+    # if image_path:
+    #     try:
+    #         im = Image.open(image_path)
+    #         plt.figure(figsize=(10, 8))
+    #         plt.imshow(im)
+    #         plt.axis("off")
+    #         plt.show()
+    #     except Exception:
+    #         print("Error displaying image")
 
     return results
 
@@ -264,9 +302,6 @@ def load_venue_metadata():
     Dict[str, Dict[str, Any]]
         Dictionary with venue names as keys and their metadata as values
     """
-    bucket_name = "wedding-venues-001"
-    storage_client = storage.Client()
-    bucket = storage_client.bucket(bucket_name)
 
     excel_blob = bucket.blob("Wedding Venues.xlsx")
     excel_content = excel_blob.download_as_bytes()
@@ -291,7 +326,7 @@ def preprocess_document(
     venue: str, venue_metadata: Dict[str, Dict[str, Any]]
 ) -> dict[str, Any]:
     """
-    Modified version of preprocess_document that includes venue metadata.
+    preprocess_document that includes venue metadata.
     """
     with (
         NamedTemporaryFile(suffix=".pdf") as temp_pdf_file,
@@ -340,7 +375,7 @@ def add_documents_to_retriever(
     venue_metadata: Dict[str, Dict[str, Any]],
 ) -> None:
     """
-    Modified version of add_documents_to_retriever that includes venue metadata.
+    add_documents_to_retriever that includes venue metadata.
     """
     id_key = "content_id"
 
@@ -394,7 +429,9 @@ def add_documents_to_retriever(
         print(f"Processed document: {pdf_name}")
 
 
-def preprocess_documents(venues: Iterable[str]) -> dict[str, dict[str, Any]]:
+def preprocess_documents(
+    venues: Iterable[str], venue_metadata
+) -> dict[str, dict[str, Any]]:
     """
     Preprocess PDFs by extracting text and generating image descriptions.
 
@@ -413,107 +450,14 @@ def preprocess_documents(venues: Iterable[str]) -> dict[str, dict[str, Any]]:
     new_documents: dict[str, dict[str, Any]] = {}
 
     for venue in tqdm(venues):
-        # is_processed = len(list_files(filter=rf"/{venue}/structuredData.json")) > 0
-        # if not is_processed:
-        document_info = preprocess_document(venue)
-        new_documents[venue] = document_info
+        is_processed = (
+            len(list_files(filter=rf"venues/{venue}/structuredData.json")) > 0
+        )
+        if not is_processed:
+            document_info = preprocess_document(venue, venue_metadata)
+            new_documents[venue] = document_info
 
     return new_documents
-
-
-# def preprocess_document(venue: str) -> dict[str, Any]:
-#     with (
-#         NamedTemporaryFile(suffix=".pdf") as temp_pdf_file,
-#         NamedTemporaryFile(suffix=".zip") as temp_zip_file,
-#         TemporaryDirectory() as temp_output_dir,
-#     ):
-#         print(f"searching for {venue}.pdf on google cloud...")
-#         cloud_venue_path = list_files(filter=rf"venues/{venue}/.*.pdf")[0]
-#         print(f"downloading {venue}.pdf from google cloud...")
-#         download_file(cloud_venue_path, temp_pdf_file.name)
-#         print(f"sending {venue}.pdf to Adobe...")
-#         adobeLoader(temp_pdf_file.name, temp_zip_file.name)
-#         print("extracting text from pdf...")
-#         text_content = extract_text_from_file_adobe(temp_zip_file.name, temp_output_dir)
-#         # do the scraping
-#         extracted_figure_folder = Path(temp_output_dir) / "figures"
-#         if not extracted_figure_folder.exists():
-#             print(f"no images found for {venue}.pdf")
-#             image_descriptions = []
-#         else:
-#             print(f"generating image descriptions for {venue}.pdf")
-#             image_descriptions = generate_image_descriptions(
-#                 base_dir=extracted_figure_folder,
-#                 venue=venue,
-#             )
-#         print("uploading adobe_extracted_directory to google cloud")
-#         upload_directory(temp_output_dir, f"/processed/adobe_extracted/{venue}/")
-
-#     doc_id = str(uuid.uuid4())
-#     document_info = {
-#         "doc_id": doc_id,
-#         "text_content": text_content,
-#         "image_descriptions": image_descriptions,
-#     }
-
-#     return document_info
-
-# def add_documents_to_retriever(
-#     documents: dict[str, dict[str, Any]], retriever: MultiVectorRetriever
-# ) -> None:
-#     """
-#     Add processed documents to the retriever.
-
-#     Parameters
-#     ----------
-#     documents : Dict[str, Dict[str, Any]]
-#         Dictionary containing processed document information.
-#     retriever : MultiVectorRetriever
-#         The retriever to add documents to.
-#     """
-#     id_key = "content_id"
-
-#     for pdf_name, doc_info in documents.items():
-#         text_ids = [
-#             f"{doc_info['doc_id']}_text_{i}"
-#             for i in range(len(doc_info["text_content"]))
-#         ]
-#         text_docs = [
-#             Document(
-#                 page_content=row,
-#                 metadata={
-#                     id_key: text_ids[i],
-#                     "doc_id": doc_info["doc_id"],
-#                     "company": pdf_name,
-#                     "type": "text",
-#                 },
-#             )
-#             for i, row in enumerate(doc_info["text_content"])
-#         ]
-
-#         image_ids = [
-#             f"{doc_info['doc_id']}_image_{i}"
-#             for i in range(len(doc_info["image_descriptions"]))
-#         ]
-#         image_docs = [
-#             Document(
-#                 page_content=item["description"],
-#                 metadata={
-#                     id_key: image_ids[i],
-#                     "doc_id": doc_info["doc_id"],
-#                     "company": pdf_name,
-#                     "type": "image",
-#                     "image_path": item["image_path"],
-#                 },
-#             )
-#             for i, item in enumerate(doc_info["image_descriptions"])
-#         ]
-
-#         all_docs = text_docs + image_docs
-#         retriever.vectorstore.add_documents(all_docs)
-
-#         original_data = [(doc.metadata[id_key], doc) for doc in all_docs]
-#         retriever.docstore.mset(original_data)
 
 
 #         print(f"Processed document: {pdf_name}")
