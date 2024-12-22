@@ -32,11 +32,17 @@ def download_file(source_blob_name: str, destination_file_name: str):
     return destination_file_name
 
 
-def download_files(files: list[str]):
+def download_files(files: list[str], destination_files: list[str] | None = None):
     client = Client()
     bucket = client.bucket(BUCKET_NAME)
 
-    downloads = [(bucket.blob(file_name), file_name) for file_name in files]
+    if destination_files is None:
+        destination_files = files
+
+    downloads = [
+        (bucket.blob(file_name), destination_file_name)
+        for file_name, destination_file_name in zip(files, destination_files)
+    ]
 
     for _, dest_path in downloads:
         os.makedirs(os.path.dirname(dest_path), exist_ok=True)
@@ -135,3 +141,28 @@ def upload_directory(local_directory: str, bucket_prefix: str = "") -> list[str]
     ]
 
     return upload_files(all_files)
+
+
+def delete_file(blob_name: str) -> bool:
+    """
+    Delete a file from Google Cloud Storage.
+
+    Parameters
+    ----------
+    blob_name : str
+        Path to the file in the bucket to delete
+
+    Returns
+    -------
+    bool
+        True if deletion was successful, False otherwise
+    """
+    try:
+        client = storage.Client()
+        bucket = client.bucket(BUCKET_NAME)
+        blob = bucket.blob(blob_name)
+        blob.delete()
+        return True
+    except Exception as e:
+        print(f"Error deleting file {blob_name}: {str(e)}")
+        return False

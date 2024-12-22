@@ -1,7 +1,7 @@
 import io
 import os
 import os.path
-import sys
+import re
 import uuid
 from collections import defaultdict
 from collections.abc import Iterable
@@ -11,6 +11,7 @@ from typing import Any, Dict
 
 import matplotlib.pyplot as plt
 import pandas as pd
+from dotenv import find_dotenv, load_dotenv
 from google.cloud import storage
 from langchain.retrievers.multi_vector import MultiVectorRetriever
 from langchain.storage import InMemoryStore
@@ -20,17 +21,22 @@ from langchain_openai import OpenAIEmbeddings
 from PIL import Image
 from tqdm import tqdm
 
-from function.cloud import download_file, list_files, upload_directory
+from function.cloud import (
+    download_file,
+    download_files,
+    list_files,
+    upload_directory,
+    upload_file,
+)
 from function.pdf_loader import adobeLoader, extract_text_from_file_adobe
 from function.process_image import generate_image_descriptions
 from function.secrets import secrets
 
-sys.path.append("..")
+load_dotenv(override=True)
 
-PERSIST_DIRECTORY: str = os.getenv("DATABASE_DIR")
-PDF_PATH: Path = Path(os.getenv("PDF_DIR"))
-
-# print(os.path.exists(PERSIST_DIRECTORY))
+PROJECT_ROOT = os.path.dirname(find_dotenv())
+PERSIST_DIRECTORY: str = os.path.join(PROJECT_ROOT, os.getenv("DATABASE_DIR"))
+PDF_PATH: Path = Path(os.path.join(PROJECT_ROOT, os.getenv("PDF_DIR")))
 
 
 def initialize_database() -> FAISS:
@@ -149,6 +155,13 @@ def remove_pdfs_from_retriever(
         retriever.vectorstore.delete(company_to_idx_mapping[pdf])
 
 
+def get_all_venue_names_on_cloud():
+    venue_paths = list_files(r"venues/.*")
+    pattern = re.compile("venues/(.*)/.*.pdf")
+    venue_names = [pattern.findall(path)[0] for path in venue_paths]
+    return venue_names
+
+
 def update_retriever(retriever: MultiVectorRetriever) -> None:
     """
     Update the retriever by adding new PDFs and removing deleted ones.
@@ -163,10 +176,7 @@ def update_retriever(retriever: MultiVectorRetriever) -> None:
     ]
     all_stored_companies = set(_["company"] for _ in metadatas)
 
-    all_companies = set(
-        path.name.replace(".pdf", "") for path in PDF_PATH.glob("*.pdf")
-    )
-    all_companies = {path.name for path in Path("venues").glob("*")}
+    all_companies = set(get_all_venue_names_on_cloud())
 
     new_pdfs = all_companies - all_stored_companies
     deleted_pdfs = all_stored_companies - all_companies
@@ -272,6 +282,11 @@ def load_venue_metadata():
     return metadata_dict
 
 
+def get_venue_images_from_cloud(venue, destination_folder):
+    images = list_files(f"/processed/adobe_extracted/{venue}/figures/.*")
+    download_files(images, [destination_folder + "/" + image for image in images])
+
+
 def preprocess_document(
     venue: str, venue_metadata: Dict[str, Dict[str, Any]]
 ) -> dict[str, Any]:
@@ -293,6 +308,7 @@ def preprocess_document(
         text_content = extract_text_from_file_adobe(temp_zip_file.name, temp_output_dir)
 
         extracted_figure_folder = Path(temp_output_dir) / "figures"
+        get_venue_images_from_cloud(venue, extracted_figure_folder)
         if not extracted_figure_folder.exists():
             print(f"no images found for {venue}.pdf")
             image_descriptions = []
@@ -397,10 +413,10 @@ def preprocess_documents(venues: Iterable[str]) -> dict[str, dict[str, Any]]:
     new_documents: dict[str, dict[str, Any]] = {}
 
     for venue in tqdm(venues):
-        is_processed = len(list_files(filter=rf"/{venue}/structuredData.json")) > 0
-        if not is_processed:
-            document_info = preprocess_document(venue)
-            new_documents[venue] = document_info
+        # is_processed = len(list_files(filter=rf"/{venue}/structuredData.json")) > 0
+        # if not is_processed:
+        document_info = preprocess_document(venue)
+        new_documents[venue] = document_info
 
     return new_documents
 
@@ -516,3 +532,10 @@ def check_existing_embeddings(vectorstore: FAISS) -> None:
     print("Existing document companies:")
     for doc in existing_docs:
         print(f"- ({doc.metadata.get('type')}){doc.metadata.get('company', 'Unknown')}")
+
+
+def upload_retriever_to_cloud() -> None:
+    upload_file(
+        os.join(PERSIST_DIRECTORY, "faiss_db/index.faiss"), "faiss_db/index.faiss"
+    )
+    upload_file(os.join(PERSIST_DIRECTORY, "faiss_db/index.pkl"), "faiss_db/index.pkl")

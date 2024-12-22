@@ -18,12 +18,11 @@ load_dotenv(override=True)
 class SeleniumDownloader:
     def __init__(self):
         chrome_options = Options()
-        chrome_options.add_argument("--headless")  # Run in headless mode
+        chrome_options.add_argument("--headless")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--window-size=1920x1080")
-        # Add user agent
         chrome_options.add_argument(
             "user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
         )
@@ -33,32 +32,18 @@ class SeleniumDownloader:
     def get_image(self, url):
         """Download image using Selenium"""
         try:
-            # First visit WeddingWire to set up cookies
             self.driver.get("https://www.weddingwire.com")
-            time.sleep(2)  # Wait for cookies to be set
+            time.sleep(2)
 
-            # Now get the image
             self.driver.get(url)
-            time.sleep(2)  # Wait for image to load
+            time.sleep(2)
 
-            # Get the image as base64
-            img_base64 = self.driver.execute_script("""
-                var c = document.createElement('canvas');
-                var ctx = c.getContext('2d');
-                var img = document.querySelector('img');
-                
-                if (!img) return null;
-                
-                c.height = img.naturalHeight;
-                c.width = img.naturalWidth;
-                ctx.drawImage(img, 0, 0);
-                
-                return c.toDataURL('image/jpeg').split(',')[1];
-            """)
+            image_data = {
+                "url": self.driver.get_screenshot_as_base64(),
+                "mime_type": "image/png",
+            }
 
-            if img_base64:
-                return base64.b64decode(img_base64)
-            return None
+            return image_data
 
         except Exception as e:
             print(f"Error downloading {url}: {str(e)}")
@@ -117,7 +102,7 @@ def get_filename_from_url(url, photo_col):
     if original_filename and len(original_filename) > 10:
         return f"extra_{original_filename}"
     else:
-        extension = os.path.splitext(parsed_url.path)[1] or ".jpg"
+        extension = os.path.splitext(parsed_url.path)[1] or ".png"
         return f"extra_{photo_col}{extension}"
 
 
@@ -163,9 +148,11 @@ def process_venues_and_photos(bucket_name):
                     )
 
                     try:
+                        image_bytes = base64.b64decode(image_content["url"])
+
                         blob = bucket.blob(gcs_path)
                         blob.upload_from_string(
-                            image_content, content_type="image/jpeg"
+                            data=image_bytes, content_type=image_content["mime_type"]
                         )
                         tracker.mark_downloaded(url, venue_name, filename)
                         print(f"✓ Successfully uploaded {filename}")

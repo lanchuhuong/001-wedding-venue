@@ -1,4 +1,4 @@
-name: Hello World Pipeline
+name: Update wedding venue database
 
 on:
   schedule:
@@ -7,11 +7,9 @@ on:
   workflow_dispatch:  # Enables manual triggering
 
 jobs:
-  run-python-script:
+  process-new-pdfs:
     runs-on: ubuntu-latest
-    
     steps:
-
       - name: Checkout repository
         uses: actions/checkout@v3
         
@@ -26,12 +24,68 @@ jobs:
           sudo apt-get install -y tesseract-ocr
           python -m pip install --upgrade pip
           pip install google-cloud-storage python-dotenv
+          pip install -r requirements.txt
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v1
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
           
-      - name: Run Python script
-        run: python test.py
+      - name: Process new PDFs
+        run: python pipelines/001_process_new_pdfs.py
+
+  update-wedding-wire:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+          
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr
+          python -m pip install --upgrade pip
+          pip install google-cloud-storage python-dotenv
+          pip install -r requirements.txt
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          
+      - name: Update Wedding Wire Images
+        run: python pipelines/000_update_wedding_wire_images.py
+
+  update-image-database:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+          
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr
+          python -m pip install --upgrade pip
+          pip install google-cloud-storage python-dotenv
+          pip install -r requirements.txt
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          
+      - name: Update Image Database
+        run: python notebooks/pipelines/002_update_image_database.py
+
 
