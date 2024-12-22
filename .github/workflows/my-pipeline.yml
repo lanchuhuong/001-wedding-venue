@@ -9,6 +9,13 @@ on:
 jobs:
   process-new-pdfs:
     runs-on: ubuntu-latest
+    env:
+      PDF_DIR: ${{ vars.PDF_DIR }}
+      OUTPUT_IMAGES_DIR: ${{ vars.OUTPUT_IMAGES_DIR }}
+      DATABASE_DIR: ${{ vars.DATABASE_DIR }}
+      ADOBE_CLIENT_ID: ${{ secrets.ADOBE_CLIENT_ID }}
+      ADOBE_CLIENT_SECRET: ${{ secrets.ADOBE_CLIENT_SECRET }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -35,7 +42,16 @@ jobs:
         run: python pipelines/001_process_new_pdfs.py
 
   update-wedding-wire:
+    needs: process-new-pdfs
+    if: always()  # Run even if process-new-pdfs fails
     runs-on: ubuntu-latest
+    env:
+      PDF_DIR: ${{ vars.PDF_DIR }}
+      OUTPUT_IMAGES_DIR: ${{ vars.OUTPUT_IMAGES_DIR }}
+      DATABASE_DIR: ${{ vars.DATABASE_DIR }}
+      ADOBE_CLIENT_ID: ${{ secrets.ADOBE_CLIENT_ID }}
+      ADOBE_CLIENT_SECRET: ${{ secrets.ADOBE_CLIENT_SECRET }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -62,7 +78,16 @@ jobs:
         run: python pipelines/000_update_wedding_wire_images.py
 
   update-image-database:
+    needs: update-wedding-wire
+    if: always()  # Run even if update-wedding-wire fails
     runs-on: ubuntu-latest
+    env:
+      PDF_DIR: ${{ vars.PDF_DIR }}
+      OUTPUT_IMAGES_DIR: ${{ vars.OUTPUT_IMAGES_DIR }}
+      DATABASE_DIR: ${{ vars.DATABASE_DIR }}
+      ADOBE_CLIENT_ID: ${{ secrets.ADOBE_CLIENT_ID }}
+      ADOBE_CLIENT_SECRET: ${{ secrets.ADOBE_CLIENT_SECRET }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -86,6 +111,6 @@ jobs:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
           
       - name: Update Image Database
-        run: python notebooks/pipelines/002_update_image_database.py
+        run: python pipelines/002_update_image_database.py
 
 

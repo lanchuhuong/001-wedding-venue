@@ -94,7 +94,6 @@ for venue in venues:
         )
 
     doc_id = str(uuid.uuid4())
-    # Include venue metadata in document_info
     venue_info = venue_metadata.get(venue, {})
     document_info = {
         "doc_id": doc_id,
@@ -107,4 +106,4 @@ for venue in venues:
 retriever = initialize_retriever()
 add_documents_to_retriever(venue_infos, retriever, venue_metadata)
 retriever.vectorstore.save_local(PERSIST_DIRECTORY)
-upload_retriever_to_cloud()
+# upload_retriever_to_cloud()
