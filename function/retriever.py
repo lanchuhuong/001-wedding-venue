@@ -110,7 +110,7 @@ def _initialize_retriever(vectorstore: FAISS) -> MultiVectorRetriever:
 
 
 def add_pdfs_to_retriever(
-    pdfs: Iterable[str | Path], retriever: MultiVectorRetriever
+    pdfs: Iterable[str | Path], retriever: MultiVectorRetriever, venue_metadata
 ) -> None:
     """
     Add PDFs to the retriever by processing and embedding their content.
@@ -123,8 +123,8 @@ def add_pdfs_to_retriever(
         The retriever to add the processed PDFs to.
     """
     pdf_paths = [PDF_PATH / f"{pdf}.pdf" for pdf in pdfs]
-    doc_infos = preprocess_documents(pdf_paths)
-    add_documents_to_retriever(doc_infos, retriever)
+    doc_infos = preprocess_documents(pdf_paths, venue_metadata)
+    add_documents_to_retriever(doc_infos, retriever, venue_metadata)
 
 
 def remove_pdfs_from_retriever(
@@ -149,7 +149,7 @@ def remove_pdfs_from_retriever(
         retriever.vectorstore.delete(company_to_idx_mapping[pdf])
 
 
-def update_retriever(retriever: MultiVectorRetriever) -> None:
+def update_retriever(retriever: MultiVectorRetriever, venue_metadata) -> None:
     """
     Update the retriever by adding new PDFs and removing deleted ones.
 
@@ -171,8 +171,8 @@ def update_retriever(retriever: MultiVectorRetriever) -> None:
     new_pdfs = all_companies - all_stored_companies
     deleted_pdfs = all_stored_companies - all_companies
 
-    add_pdfs_to_retriever(new_pdfs, retriever)
-    remove_pdfs_from_retriever(deleted_pdfs, retriever)
+    add_pdfs_to_retriever(new_pdfs, retriever, venue_metadata)
+    # remove_pdfs_from_retriever(deleted_pdfs, retriever)
     retriever.vectorstore.save_local(PERSIST_DIRECTORY)
     if new_pdfs or deleted_pdfs:
         print(f"all pdfs in {PDF_PATH}: {all_companies}")
@@ -276,7 +276,7 @@ def preprocess_document(
     venue: str, venue_metadata: Dict[str, Dict[str, Any]]
 ) -> dict[str, Any]:
     """
-    Modified version of preprocess_document that includes venue metadata.
+    preprocess_document that includes venue metadata.
     """
     with (
         NamedTemporaryFile(suffix=".pdf") as temp_pdf_file,
@@ -324,7 +324,7 @@ def add_documents_to_retriever(
     venue_metadata: Dict[str, Dict[str, Any]],
 ) -> None:
     """
-    Modified version of add_documents_to_retriever that includes venue metadata.
+    add_documents_to_retriever that includes venue metadata.
     """
     id_key = "content_id"
 
@@ -378,7 +378,9 @@ def add_documents_to_retriever(
         print(f"Processed document: {pdf_name}")
 
 
-def preprocess_documents(venues: Iterable[str]) -> dict[str, dict[str, Any]]:
+def preprocess_documents(
+    venues: Iterable[str], venue_metadata
+) -> dict[str, dict[str, Any]]:
     """
     Preprocess PDFs by extracting text and generating image descriptions.
 
@@ -397,15 +399,16 @@ def preprocess_documents(venues: Iterable[str]) -> dict[str, dict[str, Any]]:
     new_documents: dict[str, dict[str, Any]] = {}
 
     for venue in tqdm(venues):
-        is_processed = len(list_files(filter=rf"/{venue}/structuredData.json")) > 0
+        is_processed = (
+            len(list_files(filter=rf"venues/{venue}/structuredData.json")) > 0
+        )
         if not is_processed:
-            document_info = preprocess_document(venue)
+            document_info = preprocess_document(venue, venue_metadata)
             new_documents[venue] = document_info
 
     return new_documents
 
 
-# def preprocess_document(venue: str) -> dict[str, Any]:
 #     with (
 #         NamedTemporaryFile(suffix=".pdf") as temp_pdf_file,
 #         NamedTemporaryFile(suffix=".zip") as temp_zip_file,
