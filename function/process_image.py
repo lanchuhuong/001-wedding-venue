@@ -215,9 +215,9 @@ def generate_image_descriptions(
             continue
 
         output_image_dir = Path(os.getenv("OUTPUT_IMAGES_DIR")) / venue
-        output_image_dir.mkdir(exist_ok=True)
+        # output_image_dir.mkdir(exist_ok=True)
         output_image_path = output_image_dir / image_file
-        shutil.copy(image_path, output_image_path)
+        # shutil.copy(image_path, output_image_path)
         image_description.append(
             {"image_path": str(output_image_path), "description": content}
         )
