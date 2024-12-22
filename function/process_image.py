@@ -166,7 +166,7 @@ def generate_image_descriptions(
     base_dir: str,
     venue: str,
     # output_file: str = "description.json",
-    model: str = "gpt-4o",
+    model: str = "gpt-4o-mini",
 ) -> list[dict[str, str]]:
     """
     Generate descriptions for images in a directory using OpenAI's API.
@@ -198,15 +198,15 @@ def generate_image_descriptions(
                             {
                                 "type": "text",
                                 "text": """
-                                    You are tasked with summarizing the description of the images.
-                                    Give a concise summary of the images provided to you. Pay attention to the
-                                    theme. The output should not be more than 30 words. """,
+                                    You are tasked with summarizing the description of the images about wedding venues.
+                                    Give a concise summary of the images provided to you. Focus on the
+                                    style and wedding theme. The output should not be more than 30 words. """,
                             },
                             {"type": "image_url", "image_url": {"url": data_url}},
                         ],
                     }
                 ],
-                max_tokens=30,
+                max_tokens=40,
             )
 
             content = response.choices[0].message.content

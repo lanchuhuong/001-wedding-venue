@@ -1,10 +1,9 @@
 import os
 from collections.abc import Iterator
 
+import streamlit as st
 from langchain_core.messages import BaseMessageChunk
 from langchain_openai import ChatOpenAI
-
-import streamlit as st
 
 
 def get_llm_response(
@@ -12,7 +11,7 @@ def get_llm_response(
 ) -> Iterator[BaseMessageChunk]:
     """Generate a response using GPT-4 based on the retrieved context"""
     llm = ChatOpenAI(
-        model="gpt-4o",
+        model="gpt-4o-mini",
         temperature=0,
         api_key=st.session_state.OPENAI_API_KEY,
         seed=123456,
