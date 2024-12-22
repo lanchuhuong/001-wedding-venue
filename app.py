@@ -1,16 +1,19 @@
 import base64
 import concurrent.futures
 import io
+import logging
 import os
 import sys
+import warnings
 from functools import lru_cache
 from typing import Dict, List
 
 import pandas as pd
 import streamlit as st
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 from google.cloud import storage
 from PIL import Image
+from streamlit.runtime.scriptrunner import add_script_run_ctx
 
 from function.llm import get_llm_response
 from function.retriever import (
@@ -24,6 +27,12 @@ from function.retriever import (
 bucket_name = "wedding-venues-001"
 storage_client = storage.Client()
 bucket = storage_client.bucket(bucket_name)
+
+
+logging.getLogger("streamlit").setLevel(logging.ERROR)
+warnings.filterwarnings(
+    "ignore", category=UserWarning, message="missing ScriptRunContext!"
+)
 
 
 # Set page config
@@ -92,7 +101,8 @@ def preload_images(company_name: str, image_paths: List[str]) -> Dict[str, bytes
     # Use ThreadPoolExecutor for concurrent downloads
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
         futures = [executor.submit(fetch_single_image, path) for path in image_paths]
-
+        for future in futures:
+            add_script_run_ctx(future)
         # Create dictionary of successful image loads
         image_data_dict = {}
         for future in concurrent.futures.as_completed(futures):
@@ -163,14 +173,16 @@ def display_supporting_info(results, images_per_venue=3):
             # Display images
             for image_doc in images_to_show:
                 image_path = image_doc.metadata.get("image_path")
-                description = image_doc.page_content
+                # description = image_doc.page_content
 
                 if image_path and image_path in image_data_dict:
                     try:
                         image_bytes = image_data_dict[image_path]
                         image = Image.open(io.BytesIO(image_bytes))
                         st.sidebar.image(
-                            image, caption=description, use_container_width=True
+                            image,
+                            # caption=description,
+                            use_container_width=True,
                         )
                     except Exception as e:
                         print(f"Failed to display image {image_path}: {str(e)}")
@@ -198,15 +210,10 @@ def initialize_app():
     load_dotenv(override=True)
     sys.path.append("..")
     with st.spinner("Initializing retriever..."):
-        # Configure FAISS with persistence
-        PERSIST_DIRECTORY = os.path.join(os.getcwd(), os.getenv("DATABASE_DIR"))
-
-        os.makedirs(PERSIST_DIRECTORY, exist_ok=True)
-
         try:
             venue_metadata = load_venue_metadata()
             retriever = initialize_retriever()
-            update_retriever(retriever, venue_metadata)
+            # update_retriever(retriever, venue_metadata)
             st.session_state.retriever = retriever
 
             # Check existing embeddings
