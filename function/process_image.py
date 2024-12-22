@@ -119,32 +119,28 @@ def resize_image(image_path, max_size=512):
     Returns:
         str: Either the original path if no resize needed, or path to temp file if resized
     """
-    try:
-        with Image.open(image_path) as img:
-            width, height = img.size
+    with Image.open(image_path) as img:
+        width, height = img.size
 
-            if width <= max_size and height <= max_size:
-                return image_path
+        if width <= max_size and height <= max_size:
+            return image_path
 
-            scale = min(max_size / width, max_size / height)
+        scale = min(max_size / width, max_size / height)
 
-            new_width = int(width * scale)
-            new_height = int(height * scale)
+        new_width = int(width * scale)
+        new_height = int(height * scale)
 
-            file_ext = os.path.splitext(image_path)[1]
-            if not file_ext:
-                file_ext = ".png"
+        file_ext = os.path.splitext(image_path)[1]
+        if not file_ext:
+            file_ext = ".png"
 
-            temp_file = tempfile.NamedTemporaryFile(suffix=file_ext, delete=False)
-            temp_path = temp_file.name
+        temp_file = tempfile.NamedTemporaryFile(suffix=file_ext, delete=False)
+        temp_path = temp_file.name
 
-            resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
-            resized_img.save(temp_path)
+        resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        resized_img.save(temp_path)
 
-            return temp_path
-
-    except Exception as e:
-        raise Exception(f"Error processing image: {str(e)}")
+        return temp_path
 
 
 def local_image_to_data_url(image_path: str) -> str:
@@ -186,33 +182,32 @@ def generate_image_descriptions(
             print(f"skipping {image_path}")
             continue
         temp_image_path = resize_image(image_path)
-        try:
-            data_url = local_image_to_data_url(temp_image_path)
+        # try:
+        data_url = local_image_to_data_url(temp_image_path)
 
-            response = client.chat.completions.create(
-                model=model,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": """
-                                    You are tasked with summarizing the description of the images about wedding venues.
-                                    Give a concise summary of the images provided to you. Focus on the
-                                    style and wedding theme. The output should not be more than 30 words. """,
-                            },
-                            {"type": "image_url", "image_url": {"url": data_url}},
-                        ],
-                    }
-                ],
-                max_tokens=40,
-            )
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": """
+                                You are tasked with summarizing the description of the images about wedding venues.
+                                Give a concise summary of the images provided to you. Focus on the
+                                style and wedding theme. The output should not be more than 30 words. """,
+                        },
+                        {"type": "image_url", "image_url": {"url": data_url}},
+                    ],
+                }
+            ],
+            max_tokens=40,
+        )
 
-            content = response.choices[0].message.content
-        except Exception as e:
-            print(f"Error processing image {image_path}: {e}")
-            continue
+        content = response.choices[0].message.content
+        # print(f"Error processing image {image_path}: {e}")
+        # continue
 
         output_image_dir = Path(os.getenv("OUTPUT_IMAGES_DIR")) / venue
         # output_image_dir.mkdir(exist_ok=True)

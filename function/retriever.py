@@ -12,7 +12,6 @@ from typing import Any, Dict
 import matplotlib.pyplot as plt
 import pandas as pd
 from dotenv import find_dotenv, load_dotenv
-from dotenv import find_dotenv
 from google.cloud import storage
 from langchain.retrievers.multi_vector import MultiVectorRetriever
 from langchain.storage import InMemoryStore
@@ -152,7 +151,7 @@ def _initialize_retriever(vectorstore: FAISS) -> MultiVectorRetriever:
 
 
 def add_pdfs_to_retriever(
-    pdfs: Iterable[str | Path], retriever: MultiVectorRetriever, venue_metadata
+    venues: Iterable[str | Path], retriever: MultiVectorRetriever, venue_metadata
 ) -> None:
     """
     Add PDFs to the retriever by processing and embedding their content.
@@ -164,8 +163,7 @@ def add_pdfs_to_retriever(
     retriever : MultiVectorRetriever
         The retriever to add the processed PDFs to.
     """
-    pdf_paths = [PDF_PATH / f"{pdf}.pdf" for pdf in pdfs]
-    doc_infos = preprocess_documents(pdf_paths, venue_metadata)
+    doc_infos = preprocess_documents(venues, venue_metadata)
     add_documents_to_retriever(doc_infos, retriever, venue_metadata)
 
 
@@ -195,7 +193,7 @@ def get_all_venue_names_on_cloud():
     venue_paths = list_files(r"venues/.*")
     pattern = re.compile("venues/(.*)/.*.pdf")
     venue_names = [pattern.findall(path)[0] for path in venue_paths]
-    return venue_names
+    return venue_names[:2]
 
 
 def update_retriever(retriever: MultiVectorRetriever, venue_metadata) -> None:
@@ -334,7 +332,11 @@ def preprocess_document(
         TemporaryDirectory() as temp_output_dir,
     ):
         print(f"searching for {venue}.pdf on google cloud...")
-        cloud_venue_path = list_files(filter=rf"venues/{venue}/.*.pdf")[0]
+        cloud_venue_path = list_files(filter=rf"venues/{venue}/.*.pdf")
+        if not cloud_venue_path:
+            print(f"no pdf found for {venue}")
+            return None
+        cloud_venue_path = cloud_venue_path[0]
         print(f"downloading {venue}.pdf from google cloud...")
         download_file(cloud_venue_path, temp_pdf_file.name)
         print(f"sending {venue}.pdf to Adobe...")
@@ -455,6 +457,8 @@ def preprocess_documents(
         )
         if not is_processed:
             document_info = preprocess_document(venue, venue_metadata)
+            if document_info is None:
+                continue
             new_documents[venue] = document_info
 
     return new_documents

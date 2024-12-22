@@ -1,9 +1,12 @@
+import os
 import sys
 
-sys.path.append("..")
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(project_root)
 
-from function.retriever import (
+from function.retriever import (  # noqa: E402
     initialize_retriever,
+    load_venue_metadata,
     update_retriever,
     upload_retriever_to_cloud,
 )
@@ -11,7 +14,8 @@ from function.retriever import (
 
 def main():
     retriever = initialize_retriever()
-    update_retriever(retriever)
+    venue_metadata = load_venue_metadata()
+    update_retriever(retriever, venue_metadata)
     # upload_retriever_to_cloud()
 
 
