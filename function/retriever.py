@@ -1,3 +1,4 @@
+import io
 import os
 import os.path
 import sys
@@ -6,9 +7,11 @@ from collections import defaultdict
 from collections.abc import Iterable
 from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory
-from typing import Any
+from typing import Any, Dict
 
 import matplotlib.pyplot as plt
+import pandas as pd
+from google.cloud import storage
 from langchain.retrievers.multi_vector import MultiVectorRetriever
 from langchain.storage import InMemoryStore
 from langchain_community.vectorstores import FAISS
@@ -237,39 +240,113 @@ def query_documents(
     return results
 
 
-def add_documents_to_retriever(
-    documents: dict[str, dict[str, Any]], retriever: MultiVectorRetriever
-) -> None:
+def load_venue_metadata():
     """
-    Add processed documents to the retriever.
+    Load venue metadata from Excel file into a dictionary.
 
     Parameters
     ----------
-    documents : Dict[str, Dict[str, Any]]
-        Dictionary containing processed document information.
-    retriever : MultiVectorRetriever
-        The retriever to add documents to.
+    excel_path : str
+        Path to the Excel file containing venue metadata
+
+    Returns
+    -------
+    Dict[str, Dict[str, Any]]
+        Dictionary with venue names as keys and their metadata as values
+    """
+    bucket_name = "wedding-venues-001"
+    storage_client = storage.Client()
+    bucket = storage_client.bucket(bucket_name)
+
+    excel_blob = bucket.blob("Wedding Venues.xlsx")
+    excel_content = excel_blob.download_as_bytes()
+    df = pd.read_excel(io.BytesIO(excel_content))
+    # Assuming 'venue_name' is the column that matches the folder names
+    metadata_dict = {}
+    for _, row in df.iterrows():
+        metadata_dict[row["Venue name"]] = {
+            "phone": row.get("Phone", ""),
+            "address": row.get("Location", ""),
+            "website": row.get("Website ", ""),
+        }
+    return metadata_dict
+
+
+def preprocess_document(
+    venue: str, venue_metadata: Dict[str, Dict[str, Any]]
+) -> dict[str, Any]:
+    """
+    Modified version of preprocess_document that includes venue metadata.
+    """
+    with (
+        NamedTemporaryFile(suffix=".pdf") as temp_pdf_file,
+        NamedTemporaryFile(suffix=".zip") as temp_zip_file,
+        TemporaryDirectory() as temp_output_dir,
+    ):
+        print(f"searching for {venue}.pdf on google cloud...")
+        cloud_venue_path = list_files(filter=rf"venues/{venue}/.*.pdf")[0]
+        print(f"downloading {venue}.pdf from google cloud...")
+        download_file(cloud_venue_path, temp_pdf_file.name)
+        print(f"sending {venue}.pdf to Adobe...")
+        adobeLoader(temp_pdf_file.name, temp_zip_file.name)
+        print("extracting text from pdf...")
+        text_content = extract_text_from_file_adobe(temp_zip_file.name, temp_output_dir)
+
+        extracted_figure_folder = Path(temp_output_dir) / "figures"
+        if not extracted_figure_folder.exists():
+            print(f"no images found for {venue}.pdf")
+            image_descriptions = []
+        else:
+            print(f"generating image descriptions for {venue}.pdf")
+            image_descriptions = generate_image_descriptions(
+                base_dir=extracted_figure_folder,
+                venue=venue,
+            )
+        print("uploading adobe_extracted_directory to google cloud")
+        upload_directory(temp_output_dir, f"/processed/adobe_extracted/{venue}/")
+
+    doc_id = str(uuid.uuid4())
+    # Include venue metadata in document_info
+    venue_info = venue_metadata.get(venue, {})
+    document_info = {
+        "doc_id": doc_id,
+        "text_content": text_content,
+        "image_descriptions": image_descriptions,
+        "metadata": venue_info,
+    }
+
+    return document_info
+
+
+def add_documents_to_retriever(
+    documents: dict[str, dict[str, Any]],
+    retriever: MultiVectorRetriever,
+    venue_metadata: Dict[str, Dict[str, Any]],
+) -> None:
+    """
+    Modified version of add_documents_to_retriever that includes venue metadata.
     """
     id_key = "content_id"
 
     for pdf_name, doc_info in documents.items():
-        text_ids = [
-            f"{doc_info['doc_id']}_text_{i}"
-            for i in range(len(doc_info["text_content"]))
-        ]
+        # Get venue metadata
+        venue_info = venue_metadata.get(pdf_name, {})
         text_docs = [
             Document(
-                page_content=row,
+                page_content=doc_info["text_content"],
                 metadata={
-                    id_key: text_ids[i],
+                    id_key: f"{doc_info['doc_id']}_text",
                     "doc_id": doc_info["doc_id"],
                     "company": pdf_name,
                     "type": "text",
+                    "website": venue_info.get("website", ""),
+                    "address": venue_info.get("address", ""),
+                    "phone": venue_info.get("phone", ""),
                 },
             )
-            for i, row in enumerate(doc_info["text_content"])
         ]
 
+        # Create image documents with metadata
         image_ids = [
             f"{doc_info['doc_id']}_image_{i}"
             for i in range(len(doc_info["image_descriptions"]))
@@ -283,6 +360,10 @@ def add_documents_to_retriever(
                     "company": pdf_name,
                     "type": "image",
                     "image_path": item["image_path"],
+                    "website": venue_info.get("website", ""),
+                    "address": venue_info.get("address", ""),
+                    "phone": venue_info.get("phone", ""),
+                    # Add any other metadata fields
                 },
             )
             for i, item in enumerate(doc_info["image_descriptions"])
@@ -324,44 +405,102 @@ def preprocess_documents(venues: Iterable[str]) -> dict[str, dict[str, Any]]:
     return new_documents
 
 
-def preprocess_document(venue: str) -> dict[str, Any]:
-    with (
-        NamedTemporaryFile(suffix=".pdf") as temp_pdf_file,
-        NamedTemporaryFile(suffix=".zip") as temp_zip_file,
-        TemporaryDirectory() as temp_output_dir,
-    ):
-        print(f"searching for {venue}.pdf on google cloud...")
-        cloud_venue_path = list_files(filter=rf"venues/{venue}/.*.pdf")[0]
-        print(f"downloading {venue}.pdf from google cloud...")
-        download_file(cloud_venue_path, temp_pdf_file.name)
-        print(f"sending {venue}.pdf to Adobe...")
-        adobeLoader(temp_pdf_file.name, temp_zip_file.name)
-        print("extracting text from pdf...")
-        text_content = extract_text_from_file_adobe(temp_zip_file.name, temp_output_dir)
-        # do the scraping
-        extracted_figure_folder = Path(temp_output_dir) / "figures"
-        if not extracted_figure_folder.exists():
-            print(f"no images found for {venue}.pdf")
-            image_descriptions = []
-        else:
-            print(f"generating image descriptions for {venue}.pdf")
-            image_descriptions = generate_image_descriptions(
-                base_dir=extracted_figure_folder,
-                venue=venue,
-            )
-        print("uploading adobe_extracted_directory to google cloud")
-        upload_directory(temp_output_dir, f"/processed/adobe_extracted/{venue}/")
+# def preprocess_document(venue: str) -> dict[str, Any]:
+#     with (
+#         NamedTemporaryFile(suffix=".pdf") as temp_pdf_file,
+#         NamedTemporaryFile(suffix=".zip") as temp_zip_file,
+#         TemporaryDirectory() as temp_output_dir,
+#     ):
+#         print(f"searching for {venue}.pdf on google cloud...")
+#         cloud_venue_path = list_files(filter=rf"venues/{venue}/.*.pdf")[0]
+#         print(f"downloading {venue}.pdf from google cloud...")
+#         download_file(cloud_venue_path, temp_pdf_file.name)
+#         print(f"sending {venue}.pdf to Adobe...")
+#         adobeLoader(temp_pdf_file.name, temp_zip_file.name)
+#         print("extracting text from pdf...")
+#         text_content = extract_text_from_file_adobe(temp_zip_file.name, temp_output_dir)
+#         # do the scraping
+#         extracted_figure_folder = Path(temp_output_dir) / "figures"
+#         if not extracted_figure_folder.exists():
+#             print(f"no images found for {venue}.pdf")
+#             image_descriptions = []
+#         else:
+#             print(f"generating image descriptions for {venue}.pdf")
+#             image_descriptions = generate_image_descriptions(
+#                 base_dir=extracted_figure_folder,
+#                 venue=venue,
+#             )
+#         print("uploading adobe_extracted_directory to google cloud")
+#         upload_directory(temp_output_dir, f"/processed/adobe_extracted/{venue}/")
 
-    doc_id = str(uuid.uuid4())
-    document_info = {
-        "doc_id": doc_id,
-        "text_content": text_content,
-        "image_descriptions": image_descriptions,
-    }
+#     doc_id = str(uuid.uuid4())
+#     document_info = {
+#         "doc_id": doc_id,
+#         "text_content": text_content,
+#         "image_descriptions": image_descriptions,
+#     }
 
-    return document_info
+#     return document_info
+
+# def add_documents_to_retriever(
+#     documents: dict[str, dict[str, Any]], retriever: MultiVectorRetriever
+# ) -> None:
+#     """
+#     Add processed documents to the retriever.
+
+#     Parameters
+#     ----------
+#     documents : Dict[str, Dict[str, Any]]
+#         Dictionary containing processed document information.
+#     retriever : MultiVectorRetriever
+#         The retriever to add documents to.
+#     """
+#     id_key = "content_id"
+
+#     for pdf_name, doc_info in documents.items():
+#         text_ids = [
+#             f"{doc_info['doc_id']}_text_{i}"
+#             for i in range(len(doc_info["text_content"]))
+#         ]
+#         text_docs = [
+#             Document(
+#                 page_content=row,
+#                 metadata={
+#                     id_key: text_ids[i],
+#                     "doc_id": doc_info["doc_id"],
+#                     "company": pdf_name,
+#                     "type": "text",
+#                 },
+#             )
+#             for i, row in enumerate(doc_info["text_content"])
+#         ]
+
+#         image_ids = [
+#             f"{doc_info['doc_id']}_image_{i}"
+#             for i in range(len(doc_info["image_descriptions"]))
+#         ]
+#         image_docs = [
+#             Document(
+#                 page_content=item["description"],
+#                 metadata={
+#                     id_key: image_ids[i],
+#                     "doc_id": doc_info["doc_id"],
+#                     "company": pdf_name,
+#                     "type": "image",
+#                     "image_path": item["image_path"],
+#                 },
+#             )
+#             for i, item in enumerate(doc_info["image_descriptions"])
+#         ]
+
+#         all_docs = text_docs + image_docs
+#         retriever.vectorstore.add_documents(all_docs)
+
+#         original_data = [(doc.metadata[id_key], doc) for doc in all_docs]
+#         retriever.docstore.mset(original_data)
 
 
+#         print(f"Processed document: {pdf_name}")
 def check_existing_embeddings(vectorstore: FAISS) -> None:
     """
     Print information about existing embeddings in the vectorstore.
