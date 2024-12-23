@@ -36,9 +36,8 @@ jobs:
               
           headers = {
               "Content-Type": "application/json",
-              "Authorization": f"Bearer {api_key.strip()}"
+              "Authorization": f"Bearer {api_key}"
           }
-          print("Authorization header:", headers["Authorization"][:15] + "...")
           
           response = requests.post(
               "https://api.openai.com/v1/chat/completions",
