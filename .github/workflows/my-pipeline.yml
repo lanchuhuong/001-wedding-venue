@@ -36,7 +36,7 @@ jobs:
               
           headers = {
               "Content-Type": "application/json",
-              "Authorization": f"Bearer {api_key.strip()}"
+              "Authorization": f"Bearer {api_key}"
           }
           
           response = requests.post(
