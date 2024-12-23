@@ -23,20 +23,20 @@ jobs:
           echo "Adobe Client Secret: ${ADOBE_CLIENT_SECRET:0:8}"
           echo "Open AI Key: ${OPENAI_API_KEY:0:8}"
       
-          - name: test openai
-          run: |
-            curl https://api.openai.com/v1/chat/completions \
-              -H "Content-Type: application/json" \
-              -H "Authorization: Bearer ${{ secrets.OPENAI_API_KEY }}" \
-              -d '{
-                "model": "gpt-3.5-turbo",
-                "messages": [
-                  {
-                    "role": "user",
-                    "content": "Hello, world!"
-                  }
-                ]
-              }'
+      - name: test openai
+      run: |
+        curl https://api.openai.com/v1/chat/completions \
+          -H "Content-Type: application/json" \
+          -H "Authorization: Bearer ${{ secrets.OPENAI_API_KEY }}" \
+          -d '{
+            "model": "gpt-3.5-turbo",
+            "messages": [
+              {
+                "role": "user",
+                "content": "Hello, world!"
+              }
+            ]
+          }'
         
       # - name: Checkout repository
       #   uses: actions/checkout@v3
