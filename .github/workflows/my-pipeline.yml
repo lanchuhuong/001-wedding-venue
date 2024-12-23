@@ -22,7 +22,21 @@ jobs:
           echo "Adobe Client ID: ${ADOBE_CLIENT_ID:0:8}"
           echo "Adobe Client Secret: ${ADOBE_CLIENT_SECRET:0:8}"
           echo "Open AI Key: ${OPENAI_API_KEY:0:8}"
-          
+            - name: Install dependencies
+      
+      - name: test openai
+        run: |
+          pip install openai
+          python -c "
+          import openai
+          openai.api_key = '$OPENAI_API_KEY'
+          response = openai.Completion.create(
+              model='text-davinci-003',
+              prompt='Hello, world!',
+              max_tokens=5
+          )
+          print(response.choices[0].text.strip())
+          "
       - name: Checkout repository
         uses: actions/checkout@v3
         
