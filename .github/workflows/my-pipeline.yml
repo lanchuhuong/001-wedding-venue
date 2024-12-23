@@ -28,12 +28,21 @@ jobs:
           python3 -c '''
           import requests
           import os
+          
+          api_key = os.getenv("OPENAI_API_KEY")
+          if not api_key:
+              print("Error: OPENAI_API_KEY environment variable is not set")
+              exit(1)
+              
+          headers = {
+              "Content-Type": "application/json",
+              "Authorization": f"Bearer {api_key.strip()}"
+          }
+          print("Authorization header:", headers["Authorization"][:15] + "...")
+          
           response = requests.post(
               "https://api.openai.com/v1/chat/completions",
-              headers={
-                  "Content-Type": "application/json",
-                  "Authorization": "Bearer "+os.getenv("OPENAI_API_KEY")
-              },
+              headers=headers,
               json={
                   "model": "gpt-3.5-turbo",
                   "messages": [{"role": "user", "content": "Hello, world!"}]
