@@ -22,7 +22,6 @@ jobs:
           echo "Adobe Client ID: ${ADOBE_CLIENT_ID:0:8}"
           echo "Adobe Client Secret: ${ADOBE_CLIENT_SECRET:0:8}"
           echo "Open AI Key: ${OPENAI_API_KEY:0:8}"
-            - name: Install dependencies
       
       - name: test openai
         run: |
