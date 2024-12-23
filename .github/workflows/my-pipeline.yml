@@ -89,6 +89,10 @@ jobs:
       ADOBE_CLIENT_SECRET: ${{ secrets.ADOBE_CLIENT_SECRET }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     steps:
+      - name: Check Adobe Client ID and Secret
+        run: |
+          echo "Adobe Client ID: ${ADOBE_CLIENT_ID}"
+          echo "Adobe Client Secret: ${ADOBE_CLIENT_SECRET:0:8}"
       - name: Checkout repository
         uses: actions/checkout@v3
         
