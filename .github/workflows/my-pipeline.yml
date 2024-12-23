@@ -25,10 +25,22 @@ jobs:
       
       - name: Test OpenAI
         run: |
-          curl --http1.1 https://api.openai.com/v1/chat/completions \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer ${{ secrets.OPENAI_API_KEY }}" \
-            -d "{\"model\":\"gpt-3.5-turbo\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello, world!\"}]}"
+          python3 -c '
+          import requests
+          import os
+          response = requests.post(
+              "https://api.openai.com/v1/chat/completions",
+              headers={
+                  "Content-Type": "application/json",
+                  "Authorization": f"Bearer {os.environ["OPENAI_API_KEY"]}"
+              },
+              json={
+                  "model": "gpt-3.5-turbo",
+                  "messages": [{"role": "user", "content": "Hello, world!"}]
+              }
+          )
+          print(response.json())
+          '
         
 
         
