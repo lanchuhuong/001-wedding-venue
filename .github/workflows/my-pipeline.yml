@@ -47,11 +47,64 @@ jobs:
                   "messages": [{"role": "user", "content": "Hello, world!"}]
               }
           )
-          print(response.json())
+          print("OpenAI test successful!")
           '''
-        
 
-        
+      - name: Test Adobe API
+        run: |
+          python3 -c '''
+          import requests
+          import os
+          
+          client_id = os.getenv("ADOBE_CLIENT_ID")
+          client_secret = os.getenv("ADOBE_CLIENT_SECRET")
+          
+          if not client_id or not client_secret:
+              print("Error: Adobe credentials not set")
+              exit(1)
+              
+          response = requests.post(
+              "https://pdf-services.adobe.io/token",
+              headers={
+                  "Content-Type": "application/x-www-form-urlencoded"
+              },
+              data={
+                  "client_id": client_id.strip(),
+                  "client_secret": client_secret.strip(),
+                  "grant_type": "client_credentials"
+              }
+          )
+          
+          if response.status_code == 200:
+              print("Adobe API test successful!")
+          else:
+              print(f"Adobe API test failed with status {response.status_code}")
+              print(response.text)
+              exit(1)
+          '''
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Test Google Cloud
+        run: |
+          python3 -c '''
+          from google.cloud import storage
+          
+          try:
+              # Initialize the client
+              storage_client = storage.Client()
+              
+              # List buckets (this will fail if credentials are invalid)
+              buckets = list(storage_client.list_buckets())
+              print(f"Successfully listed {len(buckets)} buckets")
+              print("Google Cloud test successful!")
+              
+          except Exception as e:
+              print(f"Google Cloud test failed: {str(e)}")
+              exit(1)
+          '''
 
       # - name: Checkout repository
       #   uses: actions/checkout@v3
