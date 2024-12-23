@@ -25,17 +25,15 @@ jobs:
       
       - name: test openai
         run: |
-          pip install openai
-          python -c "
-          import openai
-          openai.api_key = \"$OPENAI_API_KEY\"
-          response = openai.Completion.create(
-              model=\"text-davinci-003\",
-              prompt=\"Hello, world!\",
-              max_tokens=5
-          )
-          print(response.choices[0].text.strip())
-          "
+          curl https://api.openai.com/v1/completions \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $OPENAI_API_KEY" \
+            -d '{
+              "model": "text-davinci-003",
+              "prompt": "Hello, world!",
+              "max_tokens": 5
+            }'
+        
       # - name: Checkout repository
       #   uses: actions/checkout@v3
         
