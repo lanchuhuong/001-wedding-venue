@@ -25,7 +25,7 @@ jobs:
       
       - name: test openai
         run: |
-          curl https://api.openai.com/v1/chat/completions \
+          curl --http1.1 https://api.openai.com/v1/chat/completions \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${{ secrets.OPENAI_API_KEY }}" \
             -d '{
