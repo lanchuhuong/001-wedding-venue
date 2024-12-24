@@ -33,84 +33,192 @@ jobs:
           pip install google-cloud-storage python-dotenv
           pip install -r requirements.txt
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v1
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-          
-      - name: Process new PDFs
-        run: python pipelines/001_process_new_pdfs.py
-
-  update-wedding-wire:
-    needs: process-new-pdfs
-    if: always()  # Run even if process-new-pdfs fails
-    runs-on: ubuntu-latest
-    env:
-      PDF_DIR: ${{ vars.PDF_DIR }}
-      OUTPUT_IMAGES_DIR: ${{ vars.OUTPUT_IMAGES_DIR }}
-      DATABASE_DIR: ${{ vars.DATABASE_DIR }}
-      ADOBE_CLIENT_ID: ${{ secrets.ADOBE_CLIENT_ID }}
-      ADOBE_CLIENT_SECRET: ${{ secrets.ADOBE_CLIENT_SECRET }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-        
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.x'
-          
-      - name: Install dependencies
+      - name: Check Adobe Client ID and Secret
         run: |
-          sudo apt-get update
-          sudo apt-get install -y tesseract-ocr
-          python -m pip install --upgrade pip
-          pip install google-cloud-storage python-dotenv
-          pip install -r requirements.txt
-
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v1
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-          
-      - name: Update Wedding Wire Images
-        run: python pipelines/000_update_wedding_wire_images.py
-
-  update-image-database:
-    needs: update-wedding-wire
-    if: always()  # Run even if update-wedding-wire fails
-    runs-on: ubuntu-latest
-    env:
-      PDF_DIR: ${{ vars.PDF_DIR }}
-      OUTPUT_IMAGES_DIR: ${{ vars.OUTPUT_IMAGES_DIR }}
-      DATABASE_DIR: ${{ vars.DATABASE_DIR }}
-      ADOBE_CLIENT_ID: ${{ secrets.ADOBE_CLIENT_ID }}
-      ADOBE_CLIENT_SECRET: ${{ secrets.ADOBE_CLIENT_SECRET }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-        
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.x'
-          
-      - name: Install dependencies
+          echo "Adobe Client ID: ${ADOBE_CLIENT_ID:0:8}"
+          echo "Adobe Client Secret: ${ADOBE_CLIENT_SECRET:0:8}"
+          echo "Open AI Key: ${OPENAI_API_KEY:0:8}"
+      
+      - name: Test OpenAI
         run: |
-          sudo apt-get update
-          sudo apt-get install -y tesseract-ocr
-          python -m pip install --upgrade pip
-          pip install google-cloud-storage python-dotenv
-          pip install -r requirements.txt
+          python3 -c '''
+          import requests
+          import os
+          
+          api_key = os.getenv("OPENAI_API_KEY")
+          if not api_key:
+              print("Error: OPENAI_API_KEY environment variable is not set")
+              exit(1)
+              
+          headers = {
+              "Content-Type": "application/json",
+              "Authorization": f"Bearer {api_key}"
+          }
+          
+          response = requests.post(
+              "https://api.openai.com/v1/chat/completions",
+              headers=headers,
+              json={
+                  "model": "gpt-3.5-turbo",
+                  "messages": [{"role": "user", "content": "Hello, world!"}]
+              }
+          )
+          print("OpenAI test successful!")
+          '''
+
+      - name: Test Adobe API
+        run: |
+          python3 -c '''
+          import os
+          import requests
+          
+          def test_adobe_connection():
+              # Get credentials from environment variables
+              client_id = os.getenv("ADOBE_CLIENT_ID")
+              client_secret = os.getenv("ADOBE_CLIENT_SECRET")
+              
+              if not client_id or not client_secret:
+                  raise ValueError("Adobe credentials not found in environment variables")
+              
+              # Make the request
+              response = requests.post(
+                  "https://pdf-services.adobe.io/token",
+                  headers={
+                      "Content-Type": "application/x-www-form-urlencoded"
+                  },
+                  data={
+                      "client_id": client_id.strip(),
+                      "client_secret": client_secret.strip()
+                  }
+              )
+              
+              # Check response
+              if response.status_code == 200:
+                  print("Successfully connected to Adobe API!")
+                  result = response.json()
+                  print("Access token received:", result.get("access_token")[:15] + "...")
+                  return result
+              else:
+                  print(f"Failed with status code: {response.status_code}")
+                  print(f"Response: {response.text}")
+                  exit(1)
+          
+          try:
+              test_adobe_connection()
+          except Exception as e:
+              print(f"Error: {str(e)}")
+              exit(1)
+          '''
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v1
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Test Google Cloud
+        run: |
+          python3 -c '''
+          from google.cloud import storage
           
-      - name: Update Image Database
-        run: python pipelines/002_update_image_database.py
+          try:
+              # Initialize the client
+              storage_client = storage.Client()
+              
+              # List buckets (this will fail if credentials are invalid)
+              buckets = list(storage_client.list_buckets())
+              print(f"Successfully listed {len(buckets)} buckets")
+              print("Google Cloud test successful!")
+              
+          except Exception as e:
+              print(f"Google Cloud test failed: {str(e)}")
+              exit(1)
+          '''
+          
+
+      # - name: Authenticate to Google Cloud
+      #   uses: google-github-actions/auth@v1
+      #   with:
+      #     credentials_json: ${{ secrets.GCP_SA_KEY }}
+          
+      # - name: Process new PDFs
+      #   run: python pipelines/001_process_new_pdfs.py
+
+  # update-wedding-wire:
+  #   needs: process-new-pdfs
+  #   if: always()  # Run even if process-new-pdfs fails
+  #   runs-on: ubuntu-latest
+  #   env:
+  #     PDF_DIR: ${{ vars.PDF_DIR }}
+  #     OUTPUT_IMAGES_DIR: ${{ vars.OUTPUT_IMAGES_DIR }}
+  #     DATABASE_DIR: ${{ vars.DATABASE_DIR }}
+  #     ADOBE_CLIENT_ID: ${{ secrets.ADOBE_CLIENT_ID }}
+  #     ADOBE_CLIENT_SECRET: ${{ secrets.ADOBE_CLIENT_SECRET }}
+  #     OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v3
+        
+  #     - name: Set up Python
+  #       uses: actions/setup-python@v4
+  #       with:
+  #         python-version: '3.x'
+          
+  #     - name: Install dependencies
+  #       run: |
+  #         sudo apt-get update
+  #         sudo apt-get install -y tesseract-ocr
+  #         python -m pip install --upgrade pip
+  #         pip install google-cloud-storage python-dotenv
+  #         pip install -r requirements.txt
+
+  #     - name: Authenticate to Google Cloud
+  #       uses: google-github-actions/auth@v1
+  #       with:
+  #         credentials_json: ${{ secrets.GCP_SA_KEY }}
+          
+  #     - name: Update Wedding Wire Images
+  #       run: python pipelines/000_update_wedding_wire_images.py
+
+  # update-image-database:
+  #   needs: update-wedding-wire
+  #   if: always()  # Run even if update-wedding-wire fails
+  #   runs-on: ubuntu-latest
+  #   env:
+  #     PDF_DIR: ${{ vars.PDF_DIR }}
+  #     OUTPUT_IMAGES_DIR: ${{ vars.OUTPUT_IMAGES_DIR }}
+  #     DATABASE_DIR: ${{ vars.DATABASE_DIR }}
+  #     ADOBE_CLIENT_ID: ${{ secrets.ADOBE_CLIENT_ID }}
+  #     ADOBE_CLIENT_SECRET: ${{ secrets.ADOBE_CLIENT_SECRET }}
+  #     OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  #   steps:
+  #     - name: Check Adobe Client ID and Secret
+  #       run: |
+  #         echo "Adobe Client ID: ${ADOBE_CLIENT_ID:0:8}"
+  #         echo "Adobe Client Secret: ${ADOBE_CLIENT_SECRET:0:8}"
+  #         echo "Open AI Key: ${OPENAI_API_KEY:0:8}"
+          
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v3
+        
+  #     - name: Set up Python
+  #       uses: actions/setup-python@v4
+  #       with:
+  #         python-version: '3.x'
+          
+  #     - name: Install dependencies
+  #       run: |
+  #         sudo apt-get update
+  #         sudo apt-get install -y tesseract-ocr
+  #         python -m pip install --upgrade pip
+  #         pip install google-cloud-storage python-dotenv
+  #         pip install -r requirements.txt
+
+  #     - name: Authenticate to Google Cloud
+  #       uses: google-github-actions/auth@v1
+  #       with:
+  #         credentials_json: ${{ secrets.GCP_SA_KEY }}
+          
+  #     - name: Update Image Database
+  #       run: python pipelines/002_update_image_database.py
 
 
