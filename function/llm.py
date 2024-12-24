@@ -11,7 +11,7 @@ def get_llm_response(
 ) -> Iterator[BaseMessageChunk]:
     """Generate a response using GPT-4 based on the retrieved context"""
     llm = ChatOpenAI(
-        model="gpt-4o-mini",
+        model="gpt-4o",
         temperature=0,
         api_key=st.session_state.OPENAI_API_KEY,
         seed=123456,
@@ -32,10 +32,9 @@ def get_llm_response(
     system_prompt = """
         You are a helpful assistant for a wedding venue search system. 
         The context provided to you contains information about wedding venues. 
-        Use those contexts to answer user's questions about wedding venues. 
-        The provided context contains the text from documents and the 
-        description of images from the document. Use both to answer 
-        the question. If the information isn't in the context, say so. 
+        Use those contexts to answer user's questions about wedding venues.
+        It is almost the case that there is always information in the context provided, never say the context does not provide information. 
+        If the specific information isn't in the context at all, say so. 
         Be concise but informative."""
 
     # Start with system prompt

@@ -18,11 +18,10 @@ data/processed/adobe_result
 data/raw
 data/raw/Southern California Wedding Venues
 notebooks/**/
-notebooks/emission_text_information_extraction.ipynb
 notebooks/parsing_images.ipynb
-notebooks/Planet_information_extraction_RAG.ipynb
 notebooks/processed
-notebooks/The Fifth Rooftop Anaheim/
+notebooks/data/processed/adobeloader_result
+notebooks/venues
 pdfs
 processed/
 Southern California Wedding Venues

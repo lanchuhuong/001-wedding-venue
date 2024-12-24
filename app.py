@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import concurrent.futures
 import io
@@ -19,9 +20,8 @@ from function.llm import get_llm_response
 from function.retriever import (
     check_existing_embeddings,
     initialize_retriever,
-    load_venue_metadata,
+    # load_venue_metadata,
     query_documents,
-    update_retriever,
 )
 
 bucket_name = "wedding-venues-001"
@@ -71,7 +71,7 @@ st.markdown(
 with st.sidebar:
     st.title("Supporting Information:")
     if st.session_state.current_supporting_docs:
-        display_supporting_info(st.session_state.current_supporting_docs)
+        asyncio.run(display_supporting_info(st.session_state.current_supporting_docs))
 
 
 # Cache for image data
@@ -89,31 +89,24 @@ def get_cached_image_data(blob_path: str) -> bytes:
     return image_data
 
 
-def preload_images(company_name: str, image_paths: List[str]) -> Dict[str, bytes]:
-    """Preload multiple images concurrently"""
-
-    def fetch_single_image(image_path: str) -> tuple[str, bytes]:
-        image_filename = os.path.basename(image_path)
-        full_path = f"processed/adobe_extracted/{company_name}/figures/{image_filename}"
-        image_data = get_cached_image_data(full_path)
-        return image_path, image_data
-
-    # Use ThreadPoolExecutor for concurrent downloads
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-        futures = [executor.submit(fetch_single_image, path) for path in image_paths]
-        for future in futures:
-            add_script_run_ctx(future)
-        # Create dictionary of successful image loads
-        image_data_dict = {}
-        for future in concurrent.futures.as_completed(futures):
-            path, data = future.result()
-            if data is not None:
-                image_data_dict[path] = data
-
-        return image_data_dict
+async def fetch_single_image_async(
+    image_path: str, company_name: str
+) -> tuple[str, bytes]:
+    image_filename = os.path.basename(image_path)
+    full_path = f"processed/adobe_extracted/{company_name}/figures/{image_filename}"
+    image_data = get_cached_image_data(full_path)
+    return image_path, image_data
 
 
-def display_supporting_info(results, images_per_venue=3):
+async def preload_images_async(
+    company_name: str, image_paths: List[str]
+) -> Dict[str, bytes]:
+    tasks = [fetch_single_image_async(path, company_name) for path in image_paths]
+    results = await asyncio.gather(*tasks)
+    return {path: data for path, data in results if data is not None}
+
+
+async def display_supporting_info(results, images_per_venue=3):
     """
     Display venue information with progressive image loading.
 
@@ -168,7 +161,9 @@ def display_supporting_info(results, images_per_venue=3):
             ]
 
             # Preload selected images
-            image_data_dict = preload_images(content["company"], image_paths)
+            image_data_dict = await preload_images_async(
+                content["company"], image_paths
+            )
 
             # Display images
             for image_doc in images_to_show:
@@ -193,13 +188,13 @@ def display_supporting_info(results, images_per_venue=3):
             if remaining > 0:
                 if st.sidebar.button(
                     f"Show {remaining} more images",
-                    key=f"load_more_{content['company']}",
+                    key=f"load_more_{content['company']}_{doc_id}",
                 ):
                     st.session_state[state_key] = True
                     st.rerun()
             elif st.session_state[state_key] and total_images > images_per_venue:
                 if st.sidebar.button(
-                    "Show fewer images", key=f"show_less_{content['company']}"
+                    "Show fewer images", key=f"show_less_{content['company']}_{doc_id}"
                 ):
                     st.session_state[state_key] = False
                     st.rerun()
@@ -211,7 +206,7 @@ def initialize_app():
     sys.path.append("..")
     with st.spinner("Initializing retriever..."):
         try:
-            venue_metadata = load_venue_metadata()
+            # venue_metadata = load_venue_metadata()
             retriever = initialize_retriever()
             # update_retriever(retriever, venue_metadata)
             st.session_state.retriever = retriever
@@ -239,10 +234,10 @@ if "chat_history" not in st.session_state:
 # Display chat history with supporting information
 for msg in st.session_state.chat_history:
     st.chat_message(msg["role"]).write(msg["content"])
-    # Display supporting information right after the assistant's message
+    # # Display supporting information right after the assistant's message
     if msg["role"] == "assistant" and "supporting_docs" in msg:
-        with st.expander("Supporting Information"):
-            display_supporting_info(msg["supporting_docs"])
+        #     with st.expander("Supporting Information"):
+        asyncio.run(display_supporting_info(msg["supporting_docs"]))
 
 
 # Query input using chat input
@@ -276,8 +271,6 @@ if query := st.chat_input("Ask about wedding venues..."):
                         "supporting_docs": results,
                     }
                 )
-                # Display supporting information for the current response
-                with st.expander("Supporting Information"):
-                    display_supporting_info(results)
+                asyncio.run(display_supporting_info(results))
             except Exception as e:
                 st.error(f"Error: {e}")
