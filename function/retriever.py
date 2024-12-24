@@ -7,14 +7,17 @@ from collections import defaultdict
 from collections.abc import Iterable
 from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory
-from typing import Any, Dict
+from typing import Any, Dict, List, Set
 
 import matplotlib.pyplot as plt
 import pandas as pd
 from dotenv import find_dotenv, load_dotenv
 from google.cloud import storage
+from langchain.retrievers import MultiVectorRetriever
 from langchain.retrievers.multi_vector import MultiVectorRetriever
+from langchain.schema import Document
 from langchain.storage import InMemoryStore
+from langchain.vectorstores import FAISS
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
@@ -22,6 +25,7 @@ from PIL import Image
 from tqdm import tqdm
 
 from function.cloud import (
+    download_directory,
     download_file,
     download_files,
     list_files,
@@ -29,8 +33,8 @@ from function.cloud import (
     upload_file,
     upload_files,
 )
+from function.image import process_images
 from function.pdf_loader import adobeLoader, extract_text_from_file_adobe
-from function.process_image import generate_image_descriptions
 from function.secrets import secrets
 
 load_dotenv(override=True)
@@ -89,7 +93,7 @@ def upload_faiss_to_cloud(local_path: str, cloud_path: str):
     return cloud_url
 
 
-def initialize_database() -> FAISS:
+def initialize_database(from_cloud=True) -> FAISS:
     """
     Initialize a FAISS database with OpenAI embeddings.
     Loads from disk if exists, creates new if not.
@@ -105,7 +109,8 @@ def initialize_database() -> FAISS:
     )
     # if not os.path.exists(PERSIST_DIRECTORY):
     print("Fetching database from the cloud...")
-    download_faiss_from_cloud(bucket.blob("faiss_db"), PERSIST_DIRECTORY)
+    if from_cloud:
+        download_faiss_from_cloud(bucket.blob("faiss_db"), PERSIST_DIRECTORY)
     # Try to load
     try:
         vectorstore = FAISS.load_local(
@@ -119,6 +124,12 @@ def initialize_database() -> FAISS:
 
 def initialize_retriever() -> MultiVectorRetriever:
     vectorstore = initialize_database()
+    retriever = _initialize_retriever(vectorstore)
+    return retriever
+
+
+def initialize_retriever_from_disk():
+    vectorstore = initialize_database(from_cloud=False)
     retriever = _initialize_retriever(vectorstore)
     return retriever
 
@@ -140,7 +151,7 @@ def _initialize_retriever(vectorstore: FAISS) -> MultiVectorRetriever:
     store = InMemoryStore()
     id_key = "content_id"
     retriever = MultiVectorRetriever(
-        vectorstore=vectorstore, docstore=store, id_key=id_key, search_kwargs={"k": 7}
+        vectorstore=vectorstore, docstore=store, id_key=id_key, search_kwargs={"k": 49}
     )
     existing_docs = [doc for doc in vectorstore.docstore._dict.values()]
     for doc in existing_docs:
@@ -193,7 +204,7 @@ def get_all_venue_names_on_cloud():
     venue_paths = list_files(r"venues/.*")
     pattern = re.compile("venues/(.*)/.*.pdf")
     venue_names = [pattern.findall(path)[0] for path in venue_paths]
-    return venue_names[:2]
+    return venue_names
 
 
 def update_retriever(retriever: MultiVectorRetriever, venue_metadata) -> None:
@@ -225,11 +236,58 @@ def update_retriever(retriever: MultiVectorRetriever, venue_metadata) -> None:
         print(f"deleted pdfs: {deleted_pdfs}")
 
 
+# def query_documents(
+#     retriever: MultiVectorRetriever, query: str
+# ) -> dict[str, dict[str, list[Document]]]:
+#     """
+#     Query documents from the retriever using the given query string.
+
+#     Parameters
+#     ----------
+#     retriever : MultiVectorRetriever
+#         The retriever to query documents from.
+#     query : str
+#         The search query string.
+
+#     Returns
+#     -------
+#     Dict[str, Dict[str, List[Document]]]
+#         Dictionary containing query results organized by document ID.
+#     """
+#     vectorstore = retriever.vectorstore
+#     similar_docs_with_score = vectorstore.similarity_search_with_score(query, k=7)
+
+#     # similar_docs = retriever.invoke(query)
+#     results: dict[str, dict[str, Any]] = {}
+#     score_threshold = 0.7
+#     for doc, score in similar_docs_with_score:
+#         print(
+#             f"doc_id: {doc.metadata['doc_id']}, type: {doc.metadata['type']}, score: {score}"
+#         )
+
+#         if score < score_threshold:
+#             continue
+#         doc_id = doc.metadata["doc_id"]
+#         if doc_id not in results:
+#             results[doc_id] = {
+#                 "company": doc.metadata["company"],
+#                 "text": [],
+#                 "images": [],
+#             }
+
+#         if doc.metadata["type"] == "text":
+#             results[doc_id]["text"].append(doc)
+#         else:
+#             results[doc_id]["images"].append(doc)
+
+#     return results
+
+
 def query_documents(
     retriever: MultiVectorRetriever, query: str
 ) -> dict[str, dict[str, list[Document]]]:
     """
-    Query documents from the retriever using the given query string.
+    Query documents from the retriever using the given query string with source diversity.
 
     Parameters
     ----------
@@ -244,44 +302,69 @@ def query_documents(
         Dictionary containing query results organized by document ID.
     """
     vectorstore = retriever.vectorstore
-    similar_docs_with_score = vectorstore.similarity_search_with_score(query, k=7)
+    # Get more initial documents to allow for filtering
+    similar_docs_with_score = vectorstore.similarity_search_with_relevance_scores(
+        query, k=49
+    )
 
-    # similar_docs = retriever.invoke(query)
-    # print(f"similar document: {similar_docs}")
-    results: dict[str, dict[str, Any]] = {}
-    score_threshold = 0.7
+    # Group documents by source (doc_id)
+    docs_by_source = {}
     for doc, score in similar_docs_with_score:
-        print(f"doc_id: {doc.metadata['doc_id']}, score: {score}")
-
-        if score < score_threshold:
-            continue
+        print(score, doc.metadata["company"], doc.metadata["type"])
         doc_id = doc.metadata["doc_id"]
-        if doc_id not in results:
-            results[doc_id] = {
-                "company": doc.metadata["company"],
-                "text": [],
-                "images": [],
-            }
+        if doc_id not in docs_by_source:
+            docs_by_source[doc_id] = []
+        docs_by_source[doc_id].append((doc, score))
 
-        if doc.metadata["type"] == "text":
-            results[doc_id]["text"].append(doc)
-        else:
-            results[doc_id]["images"].append(doc)
+    # Get diverse documents
+    results: dict[str, dict[str, Any]] = {}
+    score_threshold = 0.0
+    processed_docs = 0
 
-    # for doc_id, content in results.items():
-    #     for image_doc in content["images"]:
-    #         image_path = image_doc.metadata.get("image_path")
-    #         # description = image_doc.page_content
-    # print(f"Image Description: {description}")
-    # if image_path:
-    #     try:
-    #         im = Image.open(image_path)
-    #         plt.figure(figsize=(10, 8))
-    #         plt.imshow(im)
-    #         plt.axis("off")
-    #         plt.show()
-    #     except Exception:
-    #         print("Error displaying image")
+    # Sort sources by their best score
+    sorted_sources = list(
+        sorted(
+            docs_by_source.items(),
+            key=lambda x: min(
+                score for _, score in x[1]
+            ),  # Get best score for each source
+        )
+    )
+    print("sorted sources:")
+    print(
+        (score, doc.metadata["company"], doc.metadata["type"])
+        for doc, score in sorted_sources
+    )
+    # Process each source
+    for doc_id, docs_and_scores in sorted_sources:
+        # Skip if we already have enough documents
+        if processed_docs >= 7:
+            break
+        # Sort documents within this source by score
+        docs_and_scores.sort(key=lambda x: x[1])  # Sort by score
+
+        # Take up to 3 documents from this source
+        relevant_docs = docs_and_scores[:3]
+
+        # Filter by score threshold and process
+        for doc, score in relevant_docs:
+            if score <= score_threshold:
+                continue
+
+            if doc_id not in results:
+                results[doc_id] = {
+                    "company": doc.metadata["company"],
+                    "text": [],
+                    "images": [],
+                }
+            print(f"relevant PDFs: {results[doc_id]['company']}")
+
+            if doc.metadata["type"] == "text":
+                results[doc_id]["text"].append(doc)
+            else:
+                results[doc_id]["images"].append(doc)
+
+            processed_docs += 1
 
     return results
 
@@ -316,8 +399,35 @@ def load_venue_metadata():
 
 
 def get_venue_images_from_cloud(venue, destination_folder):
-    images = list_files(f"/processed/adobe_extracted/{venue}/figures/.*")
-    download_files(images, [destination_folder + "/" + image for image in images])
+    """
+    Downloads images for a venue from the cloud to the specified destination folder.
+
+    Parameters
+    ----------
+    venue : str
+        The venue name.
+    destination_folder : Path or str
+        The destination folder where the images will be saved.
+    """
+    destination_folder = Path(destination_folder)
+    images = list_files(f"processed/adobe_extracted/{venue}/figures/.*")
+
+    # Ensure the destination folder exists
+    destination_folder.mkdir(parents=True, exist_ok=True)
+
+    download_files(
+        images,
+        [str(destination_folder / Path(image).name) for image in images],
+    )
+
+
+def file_exists(name):
+    client = storage.Client()
+    bucket = client.bucket("wedding-venues-001")
+
+    blob1 = bucket.blob(name)
+    blob2 = bucket.blob("/" + name)
+    return blob1.exists() or blob2.exists()
 
 
 def preprocess_document(
@@ -331,31 +441,93 @@ def preprocess_document(
         NamedTemporaryFile(suffix=".zip") as temp_zip_file,
         TemporaryDirectory() as temp_output_dir,
     ):
-        print(f"searching for {venue}.pdf on google cloud...")
-        cloud_venue_path = list_files(filter=rf"venues/{venue}/.*.pdf")
-        if not cloud_venue_path:
-            print(f"no pdf found for {venue}")
-            return None
-        cloud_venue_path = cloud_venue_path[0]
-        print(f"downloading {venue}.pdf from google cloud...")
-        download_file(cloud_venue_path, temp_pdf_file.name)
-        print(f"sending {venue}.pdf to Adobe...")
-        adobeLoader(temp_pdf_file.name, temp_zip_file.name)
-        print("extracting text from pdf...")
-        text_content = extract_text_from_file_adobe(temp_zip_file.name, temp_output_dir)
+        is_processed = file_exists(f"processed/adobe_result/{venue}/sdk.zip")
+        extracted_exists = file_exists(
+            f"processed/adobe_extracted/{venue}/structuredData.json"
+        )
+        # is_processed = (
+        #     len(list_files(filter=rf"processed/adobe_result/{venue}/sdk.zip")) > 0
+        # )
+        # extracted_exists = (
+        #     len(
+        #         list_files(
+        #             filter=rf"processed/adobe_extracted/{venue}/structuredData.json"
+        #         )
+        #     )
+        #     > 0
+        # )
 
-        extracted_figure_folder = Path(temp_output_dir) / "figures"
-        get_venue_images_from_cloud(venue, extracted_figure_folder)
-        if not extracted_figure_folder.exists():
-            print(f"no images found for {venue}.pdf")
-            image_descriptions = []
-        else:
-            print(f"generating image descriptions for {venue}.pdf")
-            image_descriptions = generate_image_descriptions(
-                base_dir=extracted_figure_folder,
-                venue=venue,
+        text_embedding_exists = False
+        retriever = initialize_retriever_from_disk()
+        docs = retriever.vectorstore.docstore._dict.values()
+        for doc in docs:
+            if (doc.metadata["company"] == venue) and (doc.metadata["type"] == "text"):
+                text_embedding_exists = True
+                break
+
+        if not is_processed:
+            # No ZIP file, process the PDF with Adobe
+            print(f"searching for {venue}.pdf on Google Cloud...")
+            cloud_venue_path = list_files(filter=rf"venues/{venue}/.*.pdf")
+            if not cloud_venue_path:
+                print(f"no PDF found for {venue}")
+                return None
+            cloud_venue_path = cloud_venue_path[0]
+            print(f"downloading {venue}.pdf from Google Cloud...")
+            download_file(cloud_venue_path, temp_pdf_file.name)
+            print(f"sending {venue}.pdf to Adobe...")
+            try:
+                adobeLoader(temp_pdf_file.name, temp_zip_file.name)
+            except Exception as e:
+                print(f"error with Adobe operation: {e}")
+                return None
+            print(f"extracting text from Adobe ZIP for {venue}...")
+            text_content = extract_text_from_file_adobe(
+                temp_zip_file.name, temp_output_dir
             )
-        print("uploading adobe_extracted_directory to google cloud")
+
+        elif extracted_exists and not text_embedding_exists:
+            # ZIP file exists, and the extracted folder exists
+            print(f"Extracted folder already exists for {venue}. Downloading...")
+            extracted_folder_path = os.path.join(
+                os.getcwd(), f"processed/adobe_extracted/{venue}/"
+            )
+            download_directory(
+                venue, temp_output_dir, verbose=True
+            )  # Download the extracted folder
+            print(f"Running extract_text_from_file_adobe for {venue}...")
+            text_content = extract_text_from_file_adobe(venue, temp_output_dir)
+
+        elif not text_embedding_exists:
+            # ZIP exists but no extracted folder
+            print(f"found sdk.zip for {venue}. downloading...")
+            zip_file_path = f"processed/adobe_result/{venue}/sdk.zip"
+            extracted_folder_path = os.path.join(
+                os.getcwd(), f"processed/adobe_extracted/{venue}/"
+            )
+            download_file(zip_file_path, temp_zip_file.name)
+            print(f"extracting text from ZIP for {venue}...")
+            text_content = extract_text_from_file_adobe(
+                temp_zip_file.name, temp_output_dir
+            )
+        else:
+            return None
+        image_descriptions = process_images(
+            venue, os.path.join(temp_output_dir, "figures"), retriever
+        )
+        # extracted_figure_folder = Path(temp_output_dir) / "figures"
+        # get_venue_images_from_cloud(venue, extracted_figure_folder)
+        # if not extracted_figure_folder.exists():
+        #     print(f"no images found for {venue}.pdf")
+        #     image_descriptions = []
+        # else:
+        #     print(f"generating image descriptions for {venue}.pdf")
+        #     image_descriptions = generate_image_descriptions(
+        #         base_dir=extracted_figure_folder,
+        #         venue=venue,
+        #     )
+
+        print(f"uploading extracted folder for {venue} to Google Cloud...")
         upload_directory(temp_output_dir, f"/processed/adobe_extracted/{venue}/")
 
     doc_id = str(uuid.uuid4())
@@ -416,7 +588,6 @@ def add_documents_to_retriever(
                     "website": venue_info.get("website", ""),
                     "address": venue_info.get("address", ""),
                     "phone": venue_info.get("phone", ""),
-                    # Add any other metadata fields
                 },
             )
             for i, item in enumerate(doc_info["image_descriptions"])
@@ -450,16 +621,22 @@ def preprocess_documents(
     """
 
     new_documents: dict[str, dict[str, Any]] = {}
-
-    for venue in tqdm(venues):
-        is_processed = (
-            len(list_files(filter=rf"venues/{venue}/structuredData.json")) > 0
-        )
-        if not is_processed:
+    retriever = initialize_retriever()
+    # for venue in tqdm(venues):
+    try:
+        for venue in venues:
             document_info = preprocess_document(venue, venue_metadata)
             if document_info is None:
                 continue
+
+            add_documents_to_retriever(
+                {venue: document_info}, retriever, venue_metadata
+            )
+            retriever.vectorstore.save_local(PERSIST_DIRECTORY)
             new_documents[venue] = document_info
+    finally:
+        print("uploading retriever to cloud")
+        upload_retriever_to_cloud()
 
     return new_documents
 
@@ -483,7 +660,5 @@ def check_existing_embeddings(vectorstore: FAISS) -> None:
 
 
 def upload_retriever_to_cloud() -> None:
-    upload_file(
-        os.join(PERSIST_DIRECTORY, "faiss_db/index.faiss"), "faiss_db/index.faiss"
-    )
-    upload_file(os.join(PERSIST_DIRECTORY, "faiss_db/index.pkl"), "faiss_db/index.pkl")
+    upload_file(os.path.join(PERSIST_DIRECTORY, "index.faiss"), "faiss_db/index.faiss")
+    upload_file(os.path.join(PERSIST_DIRECTORY, "index.pkl"), "faiss_db/index.pkl")

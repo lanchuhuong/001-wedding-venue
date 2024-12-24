@@ -103,8 +103,12 @@ def predict_image_quality(model, properties: dict) -> bool:
 
 # @st.cache_data
 def is_photo(_model, image_path) -> bool:
-    properties = image_properties(image_path)
-    return predict_image_quality(_model, properties)
+    try:
+        properties = image_properties(image_path)
+        return predict_image_quality(_model, properties)
+    except Exception as e:
+        print(f"Error detecting photo: {e}")
+        return False
 
 
 def resize_image(image_path, max_size=512):
@@ -162,7 +166,7 @@ def generate_image_descriptions(
     base_dir: str,
     venue: str,
     # output_file: str = "description.json",
-    model: str = "gpt-4o-mini",
+    model: str = "gpt-4o",
 ) -> list[dict[str, str]]:
     """
     Generate descriptions for images in a directory using OpenAI's API.
@@ -172,42 +176,44 @@ def generate_image_descriptions(
     image_description = []
 
     if not os.path.isdir(base_dir):
-        raise OSError(f"Directory not found: {base_dir}")
+        print(f"Directory not found: {base_dir}")
+        return []
 
+    photo_classifier = load_is_photo_classifier()
     for i, image_file in enumerate(os.listdir(base_dir)):
         image_path = os.path.join(base_dir, image_file)
         print(f"   ({i+1}/{len(os.listdir(base_dir))}) {image_path}")
-        photo_classifier = load_is_photo_classifier()
         if not is_photo(photo_classifier, image_path):
             print(f"skipping {image_path}")
             continue
         temp_image_path = resize_image(image_path)
-        # try:
-        data_url = local_image_to_data_url(temp_image_path)
+        try:
+            data_url = local_image_to_data_url(temp_image_path)
 
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": """
-                                You are tasked with summarizing the description of the images about wedding venues.
-                                Give a concise summary of the images provided to you. Focus on the
-                                style and wedding theme. The output should not be more than 30 words. """,
-                        },
-                        {"type": "image_url", "image_url": {"url": data_url}},
-                    ],
-                }
-            ],
-            max_tokens=40,
-        )
+            response = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": """
+                                        You are tasked with summarizing the description of the images about wedding venues.
+                                        Give a concise summary of the images provided to you. Focus on the
+                                        style and wedding theme. If decorative elements (e.g., illustrations such as leaves and flowers, templates) are present, do not confuse them with real settings.The output should not be more than 30 words. """,
+                            },
+                            {"type": "image_url", "image_url": {"url": data_url}},
+                        ],
+                    }
+                ],
+                max_tokens=30,
+            )
 
-        content = response.choices[0].message.content
-        # print(f"Error processing image {image_path}: {e}")
-        # continue
+            content = response.choices[0].message.content
+        except Exception as e:
+            print(f"Error processing image {image_path}: {e}")
+            continue
 
         output_image_dir = Path(os.getenv("OUTPUT_IMAGES_DIR")) / venue
         # output_image_dir.mkdir(exist_ok=True)

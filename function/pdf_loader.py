@@ -113,10 +113,17 @@ def adobeLoader(input_pdf, output_zip_path):
         file.write(stream_asset.get_input_stream())
 
 
-def extract_text_from_file_adobe(output_zip_path, output_zipextract_folder):
+def extract_text_from_file_adobe(venue, output_zipextract_folder):
     """
     Function to extract text and table from adobe output zip file
     """
+    if not venue.endswith(".zip"):
+        output_zip_path = f"adobe_result/{venue}/sdk.zip"
+    else:
+        output_zip_path = venue
+    print(f"output zipextract folder: {output_zipextract_folder}")
+    print(f"output zip path: {output_zip_path}")
+
     json_file_path = os.path.join(output_zipextract_folder, "structuredData.json")
     # check if json file exist:
     if os.path.exists(json_file_path):
@@ -131,7 +138,7 @@ def extract_text_from_file_adobe(output_zip_path, output_zipextract_folder):
                 # Extract all the contents of the ZIP file to the current working directory
                 zip_ref.extractall(path=output_zipextract_folder)
         except Exception as e:
-            print("----Error: cannot unzip file:")
+            print("----Error: cannot unzip file")
             print(e)
 
     try:
@@ -184,6 +191,9 @@ def extract_text_from_file_adobe(output_zip_path, output_zipextract_folder):
     dfs = dfs.reset_index(drop=True)
     # Groupby page
     dfs = dfs.dropna()
+    if "text" not in dfs.columns:
+        print(f"no text found in document {venue}.pdf")
+        return ""
     dfs = dfs.groupby("page_number")["text"].apply(lambda x: "\n".join(x)).reset_index()
     text_content = "\n".join(dfs["text"].values)
     # text_content = dfs["text"].apply(lambda x: "\n".join(x)).reset_index()
