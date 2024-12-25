@@ -5,24 +5,22 @@ import re
 import uuid
 from collections import defaultdict
 from collections.abc import Iterable
+from functools import lru_cache
 from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List
 
-import matplotlib.pyplot as plt
 import pandas as pd
 from dotenv import find_dotenv, load_dotenv
 from google.cloud import storage
 from langchain.retrievers import MultiVectorRetriever
-from langchain.retrievers.multi_vector import MultiVectorRetriever
 from langchain.schema import Document
 from langchain.storage import InMemoryStore
-from langchain.vectorstores import FAISS
 from langchain_community.vectorstores import FAISS
-from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
-from PIL import Image
-from tqdm import tqdm
+from openai import OpenAI
+from pydantic import BaseModel
+from thefuzz import process
 
 from function.cloud import (
     download_directory,
@@ -281,6 +279,42 @@ def update_retriever(retriever: MultiVectorRetriever, venue_metadata) -> None:
 #             results[doc_id]["images"].append(doc)
 
 #     return results
+
+
+@lru_cache
+def get_all_venues():
+    all_venues = get_all_venue_names_on_cloud()
+    return all_venues
+
+
+get_all_venues()
+
+
+class VenueList(BaseModel):
+    venues: List[str]
+
+
+def extract_venues(text: str) -> VenueList:
+    client = OpenAI()
+
+    completion = client.beta.chat.completions.parse(
+        model="gpt-4o-2024-08-06",
+        messages=[
+            {
+                "role": "system",
+                "content": """Extract all wedding venue names from the provided text. 
+                Return only formal venue names without any additional details or descriptions.""",
+            },
+            {"role": "user", "content": text},
+        ],
+        response_format=VenueList,
+    )
+    unvalidated_venue_list = completion.choices[0].message.parsed
+    validated_venue_list = []
+    for venue in unvalidated_venue_list.venues:
+        best_match, score = process.extractOne(venue, get_all_venues())
+        validated_venue_list.append(best_match)
+    return validated_venue_list
 
 
 def query_documents(
