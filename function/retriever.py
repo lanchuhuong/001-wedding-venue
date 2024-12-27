@@ -239,53 +239,6 @@ def update_retriever(retriever: MultiVectorRetriever, venue_metadata) -> None:
         print(f"deleted pdfs: {deleted_pdfs}")
 
 
-# def query_documents(
-#     retriever: MultiVectorRetriever, query: str
-# ) -> dict[str, dict[str, list[Document]]]:
-#     """
-#     Query documents from the retriever using the given query string.
-
-#     Parameters
-#     ----------
-#     retriever : MultiVectorRetriever
-#         The retriever to query documents from.
-#     query : str
-#         The search query string.
-
-#     Returns
-#     -------
-#     Dict[str, Dict[str, List[Document]]]
-#         Dictionary containing query results organized by document ID.
-#     """
-#     vectorstore = retriever.vectorstore
-#     similar_docs_with_score = vectorstore.similarity_search_with_score(query, k=7)
-
-#     # similar_docs = retriever.invoke(query)
-#     results: dict[str, dict[str, Any]] = {}
-#     score_threshold = 0.7
-#     for doc, score in similar_docs_with_score:
-#         print(
-#             f"doc_id: {doc.metadata['doc_id']}, type: {doc.metadata['type']}, score: {score}"
-#         )
-
-#         if score < score_threshold:
-#             continue
-#         doc_id = doc.metadata["doc_id"]
-#         if doc_id not in results:
-#             results[doc_id] = {
-#                 "company": doc.metadata["company"],
-#                 "text": [],
-#                 "images": [],
-#             }
-
-#         if doc.metadata["type"] == "text":
-#             results[doc_id]["text"].append(doc)
-#         else:
-#             results[doc_id]["images"].append(doc)
-
-#     return results
-
-
 @lru_cache
 def get_all_venues():
     all_venues = get_all_venue_names_on_cloud()
@@ -441,7 +394,6 @@ def load_venue_metadata():
     excel_blob = bucket.blob("Wedding Venues.xlsx")
     excel_content = excel_blob.download_as_bytes()
     df = pd.read_excel(io.BytesIO(excel_content))
-    # Assuming 'venue_name' is the column that matches the folder names
     metadata_dict = {}
     for _, row in df.iterrows():
         metadata_dict[row["Venue name"]] = {
