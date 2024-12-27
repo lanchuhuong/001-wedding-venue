@@ -298,7 +298,7 @@ def extract_venues(text: str) -> VenueList:
     client = OpenAI()
 
     completion = client.beta.chat.completions.parse(
-        model="gpt-4o-2024-08-06",
+        model="gpt-4o-mini",
         messages=[
             {
                 "role": "system",
@@ -312,14 +312,12 @@ def extract_venues(text: str) -> VenueList:
     unvalidated_venue_list = completion.choices[0].message.parsed
     validated_venue_list = []
     for venue in unvalidated_venue_list.venues:
-        best_match, score = process.extractOne(venue, get_all_venues())
+        best_match, score = process.extractOne(venue, get_all_venues(), score_cutoff=90)
         validated_venue_list.append(best_match)
     return validated_venue_list
 
 
-def query_documents(
-    retriever: MultiVectorRetriever, query: str
-) -> dict[str, dict[str, list[Document]]]:
+def query_documents(retriever: MultiVectorRetriever, query: str) -> list[Document]:
     """
     Query documents from the retriever using the given query string with source diversity.
 
@@ -335,11 +333,28 @@ def query_documents(
     Dict[str, Dict[str, List[Document]]]
         Dictionary containing query results organized by document ID.
     """
+    MAX_RETURNED_VENUES = 7
     vectorstore = retriever.vectorstore
     # Get more initial documents to allow for filtering
     similar_docs_with_score = vectorstore.similarity_search_with_relevance_scores(
         query, k=49
     )
+
+    results = []
+    for doc, score in similar_docs_with_score:
+        if score > 0:
+            results.append(doc)
+    all_venues_with_duplicates = [doc.metadata["company"] for doc in results]
+
+    # Remove duplicates while preserving order
+    unique_venues = list(dict.fromkeys(all_venues_with_duplicates))
+
+    top_relevant_venues = unique_venues[:MAX_RETURNED_VENUES]
+
+    top_results = [
+        doc for doc in results if doc.metadata["company"] in top_relevant_venues
+    ]
+    return top_results
 
     # Group documents by source (doc_id)
     docs_by_source = {}
