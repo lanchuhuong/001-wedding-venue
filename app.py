@@ -13,7 +13,6 @@ import streamlit as st
 from dotenv import load_dotenv
 from google.cloud import storage
 from google.oauth2 import service_account
-from PIL import Image
 from streamlit_carousel import carousel
 
 from function.llm import get_llm_response
@@ -22,6 +21,9 @@ from function.retriever import (
     initialize_retriever,
     query_documents,
 )
+
+# Set page config
+st.set_page_config(page_title="Chat Document", page_icon="🔍", layout="wide")
 
 storage.Client.from_service_account_json
 try:
@@ -65,9 +67,6 @@ warnings.filterwarnings(
     "ignore", category=UserWarning, message="missing ScriptRunContext!"
 )
 
-
-# Set page config
-st.set_page_config(page_title="Chat Document", page_icon="🔍", layout="wide")
 
 # Initialize session state
 if "retriever" not in st.session_state:
