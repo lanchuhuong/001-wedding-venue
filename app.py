@@ -15,7 +15,6 @@ from google.cloud import storage
 from google.oauth2 import service_account
 from PIL import Image
 from streamlit_carousel import carousel
-from st_files_connection import FilesConnection
 
 from function.llm import get_llm_response
 from function.retriever import (
