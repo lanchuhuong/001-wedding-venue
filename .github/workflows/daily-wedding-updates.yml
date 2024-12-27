@@ -6,7 +6,7 @@ on:
   workflow_dispatch:  
 
 jobs:
-  process-new-pdfs:
+  validate-API-keys:
     runs-on: ubuntu-latest
     env:
       PDF_DIR: ${{ vars.PDF_DIR }}
