@@ -8,32 +8,15 @@ import urllib.parse
 
 import pandas as pd
 
-# import streamlit as st
 from dotenv import load_dotenv
 from google.cloud import storage
-from google.oauth2 import service_account
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 
 load_dotenv(override=True)
 storage.Client.from_service_account_json
 try:
-    # Initialize storage_client as None first
-    # storage_client = None
-
-    # # For local development
-    # if os.path.exists("turing-guard-444623-s7-2cd0a98f8177.json"):
     storage_client = storage.Client()
-
-    # For Streamlit Cloud
-    # elif "gcp_service_account" in st.secrets:
-    #     credentials = service_account.Credentials.from_service_account_info(
-    #         st.secrets["gcp_service_account"]
-    #     )
-    #     storage_client = storage.Client(
-    #         credentials=credentials,
-    #         project=st.secrets["gcp_service_account"]["project_id"],
-    #     )
 
     # Check if we successfully got a client
     if storage_client is None:
