@@ -134,3 +134,5 @@ uv==0.5.11
 websocket-client==1.8.0
 wsproto==1.2.0
 yarl==1.18.3
+streamlit_carousel==1.1.2
+thefuzz==0.22.1

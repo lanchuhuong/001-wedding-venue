@@ -12,21 +12,51 @@ import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 from google.cloud import storage
+from google.oauth2 import service_account
 from PIL import Image
 from streamlit_carousel import carousel
 
 from function.llm import get_llm_response
 from function.retriever import (
-    check_existing_embeddings,
     extract_venues,
     initialize_retriever,
-    # load_venue_metadata,
     query_documents,
 )
 
-bucket_name = "wedding-venues-001"
-storage_client = storage.Client()
-bucket = storage_client.bucket(bucket_name)
+try:
+    # Initialize storage_client as None first
+    storage_client = None
+
+    # For local development
+    if os.path.exists("turing-guard-444623-s7-2cd0a98f8177.json"):
+        storage_client = storage.Client()
+
+    # For Streamlit Cloud
+    elif "gcp_service_account" in st.secrets:
+        credentials = service_account.Credentials.from_service_account_info(
+            st.secrets["gcp_service_account"]
+        )
+        storage_client = storage.Client(
+            credentials=credentials,
+            project=st.secrets["gcp_service_account"]["project_id"],
+        )
+
+    # Check if we successfully got a client
+    if storage_client is None:
+        raise Exception("No valid credentials found")
+
+    # Initialize bucket
+    bucket_name = "wedding-venues-001"
+    bucket = storage_client.bucket(bucket_name)
+
+except Exception as e:
+    st.error(f"Error initializing Google Cloud Storage: {str(e)}")
+    # You might want to raise the exception here depending on your error handling needs
+    raise
+
+# bucket_name = "wedding-venues-001"
+# # storage_client = storage.Client()
+# bucket = storage_client.bucket(bucket_name)
 
 
 logging.getLogger("streamlit").setLevel(logging.ERROR)
@@ -154,7 +184,7 @@ def get_venue_info_for_venue(venue: str):
     }
 
 
-async def display_supporting_info(venues, images_per_venue=3):
+async def display_supporting_info(venues, relevant_docs):
     """
     Display venue information with progressive image loading.
 
@@ -253,41 +283,41 @@ async def display_supporting_info(venues, images_per_venue=3):
     #         # Preload selected images
     #         image_data_dict = await preload_images_async(
     #             content["company"], image_paths
-    #         )
+    # )
 
-    #         # Display images
-    #         for image_doc in images_to_show:
-    #             image_path = image_doc.metadata.get("image_path")
-    #             # description = image_doc.page_content
+    # # Display images
+    # for image_doc in images_to_show:
+    #     image_path = image_doc.metadata.get("image_path")
+    #     # description = image_doc.page_content
 
-    #             if image_path and image_path in image_data_dict:
-    #                 try:
-    #                     image_bytes = image_data_dict[image_path]
-    #                     image = Image.open(io.BytesIO(image_bytes))
-    #                     st.sidebar.image(
-    #                         image,
-    #                         # caption=description,
-    #                         use_container_width=True,
-    #                     )
-    #                 except Exception as e:
-    #                     print(f"Failed to display image {image_path}: {str(e)}")
-    #                     continue
+    #     if image_path and image_path in image_data_dict:
+    #         try:
+    #             image_bytes = image_data_dict[image_path]
+    #             image = Image.open(io.BytesIO(image_bytes))
+    #             st.sidebar.image(
+    #                 image,
+    #                 # caption=description,
+    #                 use_container_width=True,
+    #             )
+    #         except Exception as e:
+    #             print(f"Failed to display image {image_path}: {str(e)}")
+    #             continue
 
-    #         # Show "Load More" button if there are more images
-    #         remaining = total_images - len(images_to_show)
-    #         if remaining > 0:
-    #             if st.sidebar.button(
-    #                 f"Show {remaining} more images",
-    #                 key=f"load_more_{content['company']}_{doc_id}",
-    #             ):
-    #                 st.session_state[state_key] = True
-    #                 st.rerun()
-    #         elif st.session_state[state_key] and total_images > images_per_venue:
-    #             if st.sidebar.button(
-    #                 "Show fewer images", key=f"show_less_{content['company']}_{doc_id}"
-    #             ):
-    #                 st.session_state[state_key] = False
-    #                 st.rerun()
+    # # Show "Load More" button if there are more images
+    # remaining = total_images - len(images_to_show)
+    # if remaining > 0:
+    #     if st.sidebar.button(
+    #         f"Show {remaining} more images",
+    #         key=f"load_more_{content['company']}_{doc_id}",
+    #     ):
+    #         st.session_state[state_key] = True
+    #         st.rerun()
+    # elif st.session_state[state_key] and total_images > images_per_venue:
+    #     if st.sidebar.button(
+    #         "Show fewer images", key=f"show_less_{content['company']}_{doc_id}"
+    #     ):
+    #         st.session_state[state_key] = False
+    #         st.rerun()
 
 
 def create_supporting_docs(venues: List[str]) -> dict:
@@ -342,9 +372,6 @@ def initialize_app():
             # update_retriever(retriever, venue_metadata)
             st.session_state.retriever = retriever
 
-            # Check existing embeddings
-            check_existing_embeddings(st.session_state.retriever.vectorstore)
-
             st.success("Retriever initialized successfully!")
         except Exception as e:
             raise e
@@ -391,10 +418,12 @@ if query := st.chat_input("Ask about wedding venues..."):
                 response = response.encode("utf-8").decode("utf-8")
                 venues_from_response = extract_venues(response)
                 print(f"venues_from_response are: {venues_from_response}")
-                supporting_docs = create_supporting_docs(venues_from_response)
-                for key, value in supporting_docs.items():
-                    print(f"raw companies are: {value['company']}")
+                supporting_docs = [create_supporting_docs(venues_from_response)]
+                # for key, value in supporting_docs.items():
+                # print(f"raw companies are: {value['company']}")
+                print(f"raw companies: {supporting_docs}")
                 st.session_state.venues_from_responses.update(venues_from_response)
+                st.session_state.supporting_docs.update(supporting_docs)
 
                 st.session_state.chat_history.append(
                     {
@@ -407,8 +436,6 @@ if query := st.chat_input("Ask about wedding venues..."):
                 print(
                     f"venues_from_responses are: {st.session_state.venues_from_responses}"
                 )
-                asyncio.run(
-                    display_supporting_info(st.session_state.venues_from_responses)
-                )
+                asyncio.run(display_supporting_info(st.session_state.supporting_docs))
             except Exception as e:
                 st.error(f"Error: {e}")
