@@ -9,6 +9,7 @@ from functools import lru_cache
 from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from typing import Any, Dict, List
+import warnings
 
 import pandas as pd
 from dotenv import find_dotenv, load_dotenv
@@ -33,7 +34,10 @@ from function.cloud import (
 )
 from function.image import process_images
 
-# from function.pdf_loader import adobeLoader, extract_text_from_file_adobe
+try:
+    from function.pdf_loader import adobeLoader, extract_text_from_file_adobe
+except ImportError:
+    warnings.warn("PDF loader not found. Skipping PDF processing.")
 from function.secrets import secrets
 
 load_dotenv(override=True)

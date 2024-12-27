@@ -18,16 +18,17 @@ from function.retriever import (  # noqa: E402
     upload_retriever_to_cloud,
 )
 
+print("Loading venue metadata...")
 venue_metadata = load_venue_metadata()
 
 venues = get_all_venue_names_on_cloud()
 venue_infos = {}
-
+retriever = initialize_retriever()
 for venue in venues:
     print(f"Processing {venue}...")
 
     with TemporaryDirectory() as temp_output_dir:
-        image_descriptions = process_images(venue, temp_output_dir)
+        image_descriptions = process_images(venue, temp_output_dir, retriever)
 
     doc_id = str(uuid.uuid4())
     venue_info = venue_metadata.get(venue, {})
@@ -43,4 +44,4 @@ for venue in venues:
 retriever = initialize_retriever()
 add_documents_to_retriever(venue_infos, retriever, venue_metadata)
 retriever.vectorstore.save_local(PERSIST_DIRECTORY)
-# upload_retriever_to_cloud()
+upload_retriever_to_cloud()
