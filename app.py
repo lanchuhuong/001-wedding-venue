@@ -50,13 +50,13 @@ if "OPENAI_API_KEY" not in st.session_state:
 if "current_supporting_docs" not in st.session_state:
     st.session_state.current_supporting_docs = None
 if "venues_from_responses" not in st.session_state:
-    st.session_state.venues_from_responses = set()
+    st.session_state.venues_from_responses = dict.fromkeys([])
 if "tmp_img_folder" not in st.session_state:
     st.session_state.tmp_img_folder = TemporaryDirectory()
 if "all_relevant_docs" not in st.session_state:
     st.session_state.all_relevant_docs = []
 if "all_relevant_venues" not in st.session_state:
-    st.session_state.all_relevant_venues = set()
+    st.session_state.all_relevant_venues = dict.fromkeys([])
 
 # Center the title using Markdown and CSS
 st.markdown(
@@ -206,60 +206,62 @@ async def display_supporting_info():
     ]
     print(len(structured_documents))
     with st.sidebar.container():
-        for document in structured_documents:
-            company = document["company"]
-            metadata = document["metadata"]
-            image_paths = metadata["image_paths"]
-            venue_info = metadata["venue_information"]
-
-            if image_paths:
-                await preload_images_async(company, image_paths)
-            with st.expander(company):
-                st.subheader("Venue Information")
-                if venue_info.get("website") and pd.notna(venue_info["website"]):
-                    st.markdown(f"🌐 [Website]({venue_info['website']})")
-
-                if venue_info.get("phone") and pd.notna(venue_info["phone"]):
-                    st.markdown(f"📞 {venue_info['phone']}")
-
-                if venue_info.get("address") and pd.notna(venue_info["address"]):
-                    st.markdown(f"📍 {venue_info['address']}")
+        with st.spinner("Loading supporting information..."):
+            for document in structured_documents:
+                company = document["company"]
+                metadata = document["metadata"]
+                image_paths = metadata["image_paths"]
+                venue_info = metadata["venue_information"]
 
                 if image_paths:
-                    st.subheader("Images")
-                    carousel_items = [
-                        dict(
-                            title="",
-                            text="",
-                            img=img_path,
-                        )
-                        for i, img_path in enumerate(image_paths)
-                    ]
-                    carousel(items=carousel_items)
+                    await preload_images_async(company, image_paths)
+                with st.expander(company):
+                    st.subheader("Venue Information")
+                    if venue_info.get("website") and pd.notna(venue_info["website"]):
+                        st.markdown(f"🌐 [Website]({venue_info['website']})")
 
-                    state_key = f"show_all_images_{company}"
-                    if state_key not in st.session_state:
-                        st.session_state[state_key] = False
+                    if venue_info.get("phone") and pd.notna(venue_info["phone"]):
+                        st.markdown(f"📞 {venue_info['phone']}")
 
-                    venue_image_dict = all_image_paths_by_venue()
-                    total_images = len(venue_image_dict[company])
+                    if venue_info.get("address") and pd.notna(venue_info["address"]):
+                        st.markdown(f"📍 {venue_info['address']}")
 
-                    remaining = total_images - len(image_paths)
-                    if remaining > 0:
-                        if st.button(
-                            f"Show {remaining} more images",
-                            key=f"load_more_{company}_{uuid.uuid4()}",
-                        ):
-                            for image_path in venue_image_dict[company]:
-                                doc = Document(
-                                    page_content="",
-                                    metadata={
-                                        "image_path": image_path,
-                                        "type": "image",
-                                        "doc_id": uuid.uuid4(),
-                                    },
-                                )
-                                st.session_state.all_relevant_docs.append(doc)
+                    if image_paths:
+                        st.subheader("Images")
+                        carousel_items = [
+                            dict(
+                                title="",
+                                text="",
+                                img=img_path,
+                            )
+                            for i, img_path in enumerate(image_paths)
+                        ]
+                        carousel(items=carousel_items)
+
+                        state_key = f"show_all_images_{company}"
+                        if state_key not in st.session_state:
+                            st.session_state[state_key] = False
+
+                        venue_image_dict = all_image_paths_by_venue()
+                        total_images = len(venue_image_dict[company])
+
+                        remaining = total_images - len(image_paths)
+                        if remaining > 0:
+                            if st.button(
+                                f"Show {remaining} more images",
+                                key=f"load_more_{company}_{uuid.uuid4()}",
+                            ):
+                                for image_path in venue_image_dict[company]:
+                                    doc = Document(
+                                        page_content="",
+                                        metadata={
+                                            "image_path": image_path,
+                                            "type": "image",
+                                            "doc_id": uuid.uuid4(),
+                                        },
+                                    )
+                                    st.session_state.all_relevant_docs.append(doc)
+                                asyncio.run(display_supporting_info())
                             # st.session_state[state_key] = False
                             # st.rerun()
 
@@ -393,19 +395,13 @@ def create_supporting_docs(
 def initialize_app():
     st.session_state.initialized = True
     load_dotenv(override=True)
-    # sys.path.append("..")
     print("loading retriever from google cloud storage...")
     with st.spinner("Initializing retriever..."):
         try:
-            # venue_metadata = load_venue_metadata()
             all_image_paths_by_venue()
 
             retriever = initialize_retriever()
-            # update_retriever(retriever, venue_metadata)
             st.session_state.retriever = retriever
-
-            # Check existing embeddings
-            # check_existing_embeddings(st.session_state.retriever.vectorstore)
 
             st.success("Retriever initialized successfully!")
         except Exception as e:
@@ -415,8 +411,9 @@ def initialize_app():
 # Sidebar for API key
 with st.sidebar:
     st.title("Supporting Information")
-    if st.session_state.all_relevant_docs:
-        asyncio.run(display_supporting_info())
+    # with st.spinner("Loading supporting information..."):
+    #     if st.session_state.all_relevant_docs:
+    #         asyncio.run(display_supporting_info())
 
 # Main app layout
 st.write("Ask questions about weddings and venues!")
@@ -433,13 +430,18 @@ if "chat_history" not in st.session_state:
 for msg in st.session_state.chat_history:
     st.chat_message(msg["role"]).write(msg["content"])
     if msg["role"] == "assistant" and "supporting_docs" in msg:
-        asyncio.run(display_supporting_info(st.session_state.venues_from_responses))
+        asyncio.run(
+            display_supporting_info(list(st.session_state.venues_from_responses.keys()))
+        )
 
 
 def combine_docs(relevant_docs: list[Document], all_relevant_docs: list[Document]):
     all_relevant_doc_ids = [doc.metadata["doc_id"] for doc in all_relevant_docs]
     for doc in relevant_docs:
-        if doc.metadata["doc_id"] not in all_relevant_doc_ids:
+        if (
+            doc.metadata.get("doc_id")
+            and doc.metadata["doc_id"] not in all_relevant_doc_ids
+        ):
             all_relevant_docs.append(doc)
     return all_relevant_docs
 
@@ -484,7 +486,9 @@ if query := st.chat_input("Ask about wedding venues..."):
 
                 response = response.encode("utf-8").decode("utf-8")
                 venues_from_response = extract_venues(response)
-                st.session_state.all_relevant_venues.update(venues_from_response)
+                st.session_state.all_relevant_venues.update(
+                    dict.fromkeys(venues_from_response)
+                )
 
                 all_relevant_docs = remove_irrelevant_docs(
                     all_relevant_docs, st.session_state.all_relevant_venues
@@ -493,7 +497,7 @@ if query := st.chat_input("Ask about wedding venues..."):
 
                 print(f"venues_from_response are: {venues_from_response}")
                 print(
-                    f"all_relevant_venues are: {st.session_state.all_relevant_venues}"
+                    f"all_relevant_venues are: {list(st.session_state.all_relevant_venues.keys())}"
                 )
 
                 # supporting_docs = create_supporting_docs(
@@ -501,7 +505,9 @@ if query := st.chat_input("Ask about wedding venues..."):
                 # )
                 # for key, value in supporting_docs.items():
                 # print(f"raw companies are: {value['company']}")
-                st.session_state.venues_from_responses.update(venues_from_response)
+                st.session_state.venues_from_responses.update(
+                    dict.fromkeys(venues_from_response)
+                )
 
                 st.session_state.chat_history.append(
                     {
@@ -513,7 +519,7 @@ if query := st.chat_input("Ask about wedding venues..."):
                 )
 
                 print(
-                    f"venues_from_responses are: {st.session_state.venues_from_responses}"
+                    f"venues_from_responses are: {list(st.session_state.venues_from_responses.keys())}"
                 )
                 asyncio.run(
                     display_supporting_info(

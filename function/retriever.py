@@ -32,7 +32,8 @@ from function.cloud import (
     upload_files,
 )
 from function.image import process_images
-from function.pdf_loader import adobeLoader, extract_text_from_file_adobe
+
+# from function.pdf_loader import adobeLoader, extract_text_from_file_adobe
 from function.secrets import secrets
 
 load_dotenv(override=True)
