@@ -43,9 +43,40 @@ PROJECT_ROOT = os.path.dirname(path)
 PERSIST_DIRECTORY = os.path.join(PROJECT_ROOT, os.getenv("DATABASE_DIR"))
 PDF_PATH: Path = Path(PROJECT_ROOT) / Path(os.getenv("PDF_DIR"))
 
-bucket_name = "wedding-venues-001"
-storage_client = storage.Client()
-bucket = storage_client.bucket(bucket_name)
+
+# bucket_name = "wedding-venues-001"
+# storage_client = storage.Client()
+# bucket = storage_client.bucket(bucket_name)
+
+storage.Client.from_service_account_json
+try:
+    # Initialize storage_client as None first
+    storage_client = None
+
+    # For local development
+    if os.path.exists("turing-guard-444623-s7-2cd0a98f8177.json"):
+        storage_client = storage.Client()
+
+    # For Streamlit Cloud
+    elif "gcp_service_account" in st.secrets:
+        credentials = service_account.Credentials.from_service_account_info(
+            st.secrets["gcp_service_account"]
+        )
+        storage_client = storage.Client(
+            credentials=credentials,
+            project=st.secrets["gcp_service_account"]["project_id"],
+        )
+
+    # Check if we successfully got a client
+    if storage_client is None:
+        raise Exception("No valid credentials found")
+
+    # Initialize bucket
+    bucket_name = "wedding-venues-001"
+    bucket = storage_client.bucket(bucket_name)
+except Exception as e:
+    print(f"Error initializing Google Cloud Storage: {str(e)}")
+    raise
 
 
 def download_faiss_from_cloud(cloud_path: str, local_path: str):
