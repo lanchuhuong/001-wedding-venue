@@ -9,7 +9,7 @@ from langchain_openai import ChatOpenAI
 
 def get_llm_response(
     query: str, context: list[Document], chat_history
-) -> Iterator[BaseMessageChunk]:
+) -> Iterator[str]:
     """Generate a response using GPT-4 based on the retrieved context"""
     llm = ChatOpenAI(
         model="gpt-4o-mini",
@@ -57,5 +57,6 @@ def get_llm_response(
         }
     )
 
-    response = llm.stream(messages)
-    return response
+    for chunk in llm.stream(messages):
+        content = chunk.content.replace("$", r"\$") if chunk.content else ""
+        yield content
