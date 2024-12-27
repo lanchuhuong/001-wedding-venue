@@ -2,16 +2,17 @@ import os
 from collections.abc import Iterator
 
 import streamlit as st
+from langchain.schema import Document
 from langchain_core.messages import BaseMessageChunk
 from langchain_openai import ChatOpenAI
 
 
 def get_llm_response(
-    query: str, context: dict, chat_history
+    query: str, context: list[Document], chat_history
 ) -> Iterator[BaseMessageChunk]:
     """Generate a response using GPT-4 based on the retrieved context"""
     llm = ChatOpenAI(
-        model="gpt-4o",
+        model="gpt-4o-mini",
         temperature=0,
         api_key=st.session_state.OPENAI_API_KEY,
         seed=123456,
@@ -19,14 +20,19 @@ def get_llm_response(
 
     # Prepare the context string
     context_text = ""
-    image_descriptions = []
+    image_descriptions = ""
 
-    for doc_id, content in context.items():
-        context_text += f"\nCompany: {content['company']}\n"
-        for text_doc in content["text"]:
-            context_text += f"{text_doc.page_content}\n"
-        for image_doc in content["images"]:
-            image_descriptions.append(image_doc.page_content)
+    for document in context:
+        if document.metadata["type"] == "text":
+            context_text += f"==========\nCompany: {document.metadata['company']}\n\n"
+            context_text += f"Document Content: {document.page_content}\n\n==========\n"
+        elif document.metadata["type"] == "image":
+            image_descriptions += (
+                f"==========\nCompany: {document.metadata['company']}\n\n"
+            )
+            image_descriptions += (
+                f"Image Description: {document.page_content}\n\n==========\n"
+            )
 
     # Create the prompt
     system_prompt = """
@@ -37,20 +43,17 @@ def get_llm_response(
         If the specific information isn't in the context at all, say so. 
         Be concise but informative."""
 
-    # Start with system prompt
     messages = [
         {"role": "system", "content": system_prompt},
     ]
 
-    # Add previous chat history if it exists
     if chat_history:
         messages.extend(chat_history)
 
-    # Add current query with context as the latest message
     messages.append(
         {
             "role": "user",
-            "content": f"Context: {context_text}\nImage Descriptions: {'; '.join(image_descriptions)}\n\nQuestion: {query}",
+            "content": f"Context: {context_text}\nImage Descriptions: {image_descriptions}\n\nQuestion: {query}",
         }
     )
 
