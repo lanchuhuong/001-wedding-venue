@@ -7,12 +7,44 @@ import time
 import urllib.parse
 
 import pandas as pd
+import streamlit as st
 from dotenv import load_dotenv
 from google.cloud import storage
+from google.oauth2 import service_account
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 
 load_dotenv(override=True)
+storage.Client.from_service_account_json
+try:
+    # Initialize storage_client as None first
+    storage_client = None
+
+    # For local development
+    if os.path.exists("turing-guard-444623-s7-2cd0a98f8177.json"):
+        storage_client = storage.Client()
+
+    # For Streamlit Cloud
+    elif "gcp_service_account" in st.secrets:
+        credentials = service_account.Credentials.from_service_account_info(
+            st.secrets["gcp_service_account"]
+        )
+        storage_client = storage.Client(
+            credentials=credentials,
+            project=st.secrets["gcp_service_account"]["project_id"],
+        )
+
+    # Check if we successfully got a client
+    if storage_client is None:
+        raise Exception("No valid credentials found")
+
+    # Initialize bucket
+    bucket_name = "wedding-venues-001"
+    bucket = storage_client.bucket(bucket_name)
+
+except Exception as e:
+    print(f"Error initializing Google Cloud Storage: {str(e)}")
+    raise
 
 
 class SeleniumDownloader:
@@ -53,7 +85,7 @@ class SeleniumDownloader:
         """Clean up the browser when done"""
         try:
             self.driver.quit()
-        except:
+        except Exception:
             pass
 
 
@@ -107,8 +139,8 @@ def get_filename_from_url(url, photo_col):
 
 
 def process_venues_and_photos(bucket_name):
-    storage_client = storage.Client()
-    bucket = storage_client.bucket(bucket_name)
+    # storage_client = storage.Client()
+    # bucket = storage_client.bucket(bucket_name)
     downloader = SeleniumDownloader()
     tracker = ChangeTracker(bucket)
 
