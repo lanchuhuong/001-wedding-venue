@@ -16,9 +16,9 @@ import pandas as pd
 try:
     import streamlit as st
 
-    STREAMLIT_INSTALLED = True
+    STREAMLIT_AVAILABLE = True
 except ImportError:
-    STREAMLIT_INSTALLED = False
+    STREAMLIT_AVAILABLE = False
 from dotenv import find_dotenv, load_dotenv
 from google.cloud import storage
 from google.oauth2 import service_account
@@ -60,10 +60,11 @@ try:
     # Initialize storage_client as None first
     storage_client = None
 
-    # For local development
-    if os.path.exists("turing-guard-444623-s7-2cd0a98f8177.json"):
+    # For local development and github actions
+    if (not STREAMLIT_AVAILABLE) or os.path.exists(
+        "turing-guard-444623-s7-2cd0a98f8177.json"
+    ):
         storage_client = storage.Client()
-
     # For Streamlit Cloud
     elif "gcp_service_account" in st.secrets:
         credentials = service_account.Credentials.from_service_account_info(
@@ -160,7 +161,7 @@ def initialize_database(from_cloud=True) -> FAISS:
 
 def cache_resource_if_available(func):
     """Decorator that applies st.cache_resource if Streamlit is installed"""
-    if STREAMLIT_INSTALLED:
+    if STREAMLIT_AVAILABLE:
         return st.cache_resource(func)
     return func
 
