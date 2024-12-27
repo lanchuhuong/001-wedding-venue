@@ -47,8 +47,6 @@ def list_files(filter=None):
     if filter is not None:
         filter = re.compile(filter, re.IGNORECASE)
 
-    # client = storage.Client()
-    # bucket = client.bucket(bucket_name)
     blobs = bucket.list_blobs()
     return [blob.name for blob in blobs if filter is None or filter.search(blob.name)]
 
@@ -57,10 +55,6 @@ def download_file(source_blob_name: str, destination_file_name: str):
     source_blob_name = Path(source_blob_name).as_posix()
     destination_file_name = Path(destination_file_name).as_posix()
     os.makedirs(os.path.dirname(destination_file_name), exist_ok=True)
-    # source_blob_name.replace("//", "/")
-    # source_blob_name = source_blob_name.strip("/").replace("//", "/")
-    # client = storage.Client()
-    # bucket = client.bucket(bucket_name)
     blob = bucket.blob(source_blob_name)
 
     blob.download_to_filename(destination_file_name)
@@ -70,9 +64,6 @@ def download_file(source_blob_name: str, destination_file_name: str):
 def download_files(
     files: list[str], destination_files: list[str] | None = None, verbose=False
 ):
-    # client = Client()
-    # bucket = client.bucket(bucket_name)
-
     if destination_files is None:
         destination_files = files
 
@@ -113,8 +104,6 @@ def upload_file(source_file_path: str, destination_blob_name: str | None = None)
     if destination_blob_name is None:
         destination_blob_name = Path(source_file_path).name
 
-    # client = storage.Client()
-    # bucket = client.bucket(BUCKET_NAME)
     blob = bucket.blob(destination_blob_name)
 
     blob.upload_from_filename(source_file_path)
@@ -136,8 +125,6 @@ def upload_files(file_pairs: list[tuple[str, str]]) -> list[str]:
     list[str]
         List of public URLs for the uploaded files
     """
-    # client = Client()
-    # bucket = client.bucket(BUCKET_NAME)
 
     # Create list of (source_file, destination_blob) tuples
     uploads = [
@@ -171,10 +158,7 @@ def upload_directory(local_directory: str, bucket_prefix: str = "") -> list[str]
         List of public URLs for all uploaded files
     """
     local_dir = Path(local_directory)
-    # storage_client = storage.Client()
-    # bucket = storage_client.bucket(BUCKET_NAME)
 
-    # Get all local files
     all_files = [
         (str(path), os.path.join(bucket_prefix, path.relative_to(local_dir).as_posix()))
         for path in local_dir.rglob("*")
@@ -212,8 +196,6 @@ def delete_file(blob_name: str) -> bool:
         True if deletion was successful, False otherwise
     """
     try:
-        # client = storage.Client()
-        # bucket = client.bucket(BUCKET_NAME)
         blob = bucket.blob(blob_name)
         blob.delete()
         return True
@@ -239,14 +221,10 @@ def download_directory(venue: str, target_dir: str, verbose: bool = False) -> Li
     List[str]
         List of downloaded file paths
     """
-    # storage_client = storage.Client()
-    # bucket = storage_client.bucket("wedding-venues-001")
     prefix = f"processed/adobe_extracted/{venue}/"
 
     print(f"Using prefix: {prefix}")
     blobs = list(bucket.list_blobs(prefix=prefix))
-    # Debug
-    # print(f"Retrieved blobs: {[blob.name for blob in blobs]}")
 
     if not blobs:
         print(f"No files found for venue: {prefix}")
