@@ -3,15 +3,22 @@ import os
 import os.path
 import re
 import uuid
+import warnings
 from collections import defaultdict
 from collections.abc import Iterable
 from functools import lru_cache
 from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from typing import Any, Dict, List
-import warnings
 
 import pandas as pd
+
+try:
+    import streamlit as st
+
+    STREAMLIT_INSTALLED = True
+except ImportError:
+    STREAMLIT_INSTALLED = False
 from dotenv import find_dotenv, load_dotenv
 from google.cloud import storage
 from langchain.retrievers import MultiVectorRetriever
@@ -125,7 +132,15 @@ def initialize_database(from_cloud=True) -> FAISS:
         print(f"Error loading existing index: {e}")
 
 
-def initialize_retriever() -> MultiVectorRetriever:
+def cache_resource_if_available(func):
+    """Decorator that applies st.cache_resource if Streamlit is installed"""
+    if STREAMLIT_INSTALLED:
+        return st.cache_resource(func)
+    return func
+
+
+@cache_resource_if_available
+def initialize_retriever():
     vectorstore = initialize_database()
     retriever = _initialize_retriever(vectorstore)
     return retriever
@@ -294,9 +309,11 @@ def query_documents(retriever: MultiVectorRetriever, query: str) -> list[Documen
     MAX_RETURNED_VENUES = 7
     vectorstore = retriever.vectorstore
     # Get more initial documents to allow for filtering
-    similar_docs_with_score = vectorstore.similarity_search_with_relevance_scores(
-        query, k=49
-    )
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning)
+        similar_docs_with_score = vectorstore.similarity_search_with_relevance_scores(
+            query, k=49
+        )
 
     results = []
     for doc, score in similar_docs_with_score:
