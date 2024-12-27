@@ -3,7 +3,13 @@ import re
 from pathlib import Path
 from typing import List
 
-import streamlit as st
+try:
+    import streamlit as st
+
+    STREAMLIT_AVAILABLE = True
+except ImportError:
+    STREAMLIT_AVAILABLE = False
+
 from dotenv import load_dotenv
 from google.cloud import storage
 from google.cloud.storage import transfer_manager
@@ -11,13 +17,14 @@ from google.oauth2 import service_account
 
 load_dotenv()
 
-storage.Client.from_service_account_json
 try:
     # Initialize storage_client as None first
     storage_client = None
 
-    # For local development
-    if os.path.exists("turing-guard-444623-s7-2cd0a98f8177.json"):
+    # For local development and github actions
+    if not STREAMLIT_AVAILABLE or os.path.exists(
+        "turing-guard-444623-s7-2cd0a98f8177.json"
+    ):
         storage_client = storage.Client()
 
     # For Streamlit Cloud
