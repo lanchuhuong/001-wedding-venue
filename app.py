@@ -1,9 +1,7 @@
-# import asyncio
 import concurrent.futures
 import logging
 import os
 import re
-import sys
 import time
 import warnings
 from collections import defaultdict
@@ -16,8 +14,8 @@ import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 from google.cloud import storage
-from langchain.schema import Document
 from google.oauth2 import service_account
+from langchain.schema import Document
 from streamlit_carousel import carousel
 
 from function.cloud import list_files
@@ -31,7 +29,6 @@ from function.retriever import (
 # Set page config
 st.set_page_config(page_title="Chat Document", page_icon="🔍", layout="wide")
 
-storage.Client.from_service_account_json
 try:
     # Initialize storage_client as None first
     storage_client = None
@@ -160,7 +157,6 @@ def all_image_paths_by_venue() -> dict[str, list[str]]:
 
 @st.cache_resource
 def get_image_paths_for_venue(venue: str, _relevant_docs: list[Document]):
-    # result_docs = get_docs_for_venue(venue)
     venue_relevant_docs = filter(
         lambda doc: doc.metadata["company"] == venue, _relevant_docs
     )
@@ -215,7 +211,6 @@ def display_supporting_info():
     print(f"time to get image paths: {time.time() - t}")
 
     with st.sidebar.container():
-        # st.title("Supporting Information:")
         with st.spinner("Downloading supporting information..."):
             for document in structured_documents:
                 company = document["company"]
@@ -271,13 +266,11 @@ def create_supporting_docs(
         dict: Dictionary with document IDs as keys and venue information as values
     """
     # Get the retriever from session state
-    # retriever = st.session_state.retriever
 
     # Initialize the supporting docs dictionary
     supporting_docs = {}
 
     # Get all documents from vectorstore
-    # all_docs = retriever.vectorstore.docstore._dict.items()
     relevant_docs = [
         doc for doc in results.values() if doc.metadata.get("company") in venues
     ]
@@ -308,11 +301,9 @@ def initialize_app():
     load_dotenv(override=True)
     with st.spinner("Initializing retriever..."):
         try:
-            # venue_metadata = load_venue_metadata()
             all_image_paths_by_venue()
 
             retriever = initialize_retriever()
-            # update_retriever(retriever, venue_metadata)
             st.session_state.retriever = retriever
 
             st.success("Retriever initialized successfully!")
@@ -323,8 +314,6 @@ def initialize_app():
 # Sidebar for API key
 with st.sidebar:
     st.title("Supporting Information")
-    # if st.session_state.all_relevant_docs:
-    #     asyncio.run(display_supporting_info())
 
 # Main app layout
 st.write("Ask questions about weddings and venues!")
@@ -406,19 +395,12 @@ if query := st.chat_input("Ask about wedding venues..."):
                     f"all_relevant_venues are: {st.session_state.all_relevant_venues}"
                 )
 
-                # supporting_docs = create_supporting_docs(
-                #     venues_from_response, all_relevant_docs
-                # )
-                # for key, value in supporting_docs.items():
-                # print(f"raw companies are: {value['company']}")
                 st.session_state.venues_from_responses.update(venues_from_response)
 
                 st.session_state.chat_history.append(
                     {
                         "role": "assistant",
                         "content": response,
-                        # "supporting_docs": supporting_docs,
-                        # "venues_from_responses": st.session_state.venues_from_responses,
                     }
                 )
                 print(

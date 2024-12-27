@@ -56,11 +56,6 @@ PERSIST_DIRECTORY = os.path.join(PROJECT_ROOT, os.getenv("DATABASE_DIR"))
 PDF_PATH: Path = Path(PROJECT_ROOT) / Path(os.getenv("PDF_DIR"))
 
 
-# bucket_name = "wedding-venues-001"
-# storage_client = storage.Client()
-# bucket = storage_client.bucket(bucket_name)
-
-storage.Client.from_service_account_json
 try:
     # Initialize storage_client as None first
     storage_client = None
@@ -149,7 +144,6 @@ def initialize_database(from_cloud=True) -> FAISS:
         model="text-embedding-3-large",
         api_key=secrets.OPENAI_API_KEY.get_secret_value(),
     )
-    # if not os.path.exists(PERSIST_DIRECTORY):
     print("Fetching database from the cloud...")
     if from_cloud:
         download_faiss_from_cloud(bucket.blob("faiss_db"), PERSIST_DIRECTORY)
@@ -277,7 +271,6 @@ def update_retriever(retriever: MultiVectorRetriever, venue_metadata) -> None:
     deleted_pdfs = all_stored_companies - all_companies
 
     add_pdfs_to_retriever(new_pdfs, retriever, venue_metadata)
-    # remove_pdfs_from_retriever(deleted_pdfs, retriever)
     retriever.vectorstore.save_local(PERSIST_DIRECTORY)
     if new_pdfs or deleted_pdfs:
         print(f"all pdfs in {PDF_PATH}: {all_companies}")
@@ -500,17 +493,6 @@ def preprocess_document(
         extracted_exists = file_exists(
             f"processed/adobe_extracted/{venue}/structuredData.json"
         )
-        # is_processed = (
-        #     len(list_files(filter=rf"processed/adobe_result/{venue}/sdk.zip")) > 0
-        # )
-        # extracted_exists = (
-        #     len(
-        #         list_files(
-        #             filter=rf"processed/adobe_extracted/{venue}/structuredData.json"
-        #         )
-        #     )
-        #     > 0
-        # )
 
         text_embedding_exists = False
         retriever = initialize_retriever_from_disk()
@@ -570,17 +552,6 @@ def preprocess_document(
         image_descriptions = process_images(
             venue, os.path.join(temp_output_dir, "figures"), retriever
         )
-        # extracted_figure_folder = Path(temp_output_dir) / "figures"
-        # get_venue_images_from_cloud(venue, extracted_figure_folder)
-        # if not extracted_figure_folder.exists():
-        #     print(f"no images found for {venue}.pdf")
-        #     image_descriptions = []
-        # else:
-        #     print(f"generating image descriptions for {venue}.pdf")
-        #     image_descriptions = generate_image_descriptions(
-        #         base_dir=extracted_figure_folder,
-        #         venue=venue,
-        #     )
 
         print(f"uploading extracted folder for {venue} to Google Cloud...")
         upload_directory(temp_output_dir, f"/processed/adobe_extracted/{venue}/")
@@ -677,7 +648,6 @@ def preprocess_documents(
 
     new_documents: dict[str, dict[str, Any]] = {}
     retriever = initialize_retriever()
-    # for venue in tqdm(venues):
     try:
         for venue in venues:
             document_info = preprocess_document(venue, venue_metadata)
@@ -696,7 +666,6 @@ def preprocess_documents(
     return new_documents
 
 
-#         print(f"Processed document: {pdf_name}")
 def check_existing_embeddings(vectorstore: FAISS) -> None:
     """
     Print information about existing embeddings in the vectorstore.
