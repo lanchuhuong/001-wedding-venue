@@ -3,21 +3,52 @@ import re
 from pathlib import Path
 from typing import List
 
+import streamlit as st
 from dotenv import load_dotenv
 from google.cloud import storage
-from google.cloud.storage import Client, transfer_manager
+from google.cloud.storage import transfer_manager
+from google.oauth2 import service_account
 
 load_dotenv()
 
-BUCKET_NAME = "wedding-venues-001"
+storage.Client.from_service_account_json
+try:
+    # Initialize storage_client as None first
+    storage_client = None
+
+    # For local development
+    if os.path.exists("turing-guard-444623-s7-2cd0a98f8177.json"):
+        storage_client = storage.Client()
+
+    # For Streamlit Cloud
+    elif "gcp_service_account" in st.secrets:
+        credentials = service_account.Credentials.from_service_account_info(
+            st.secrets["gcp_service_account"]
+        )
+        storage_client = storage.Client(
+            credentials=credentials,
+            project=st.secrets["gcp_service_account"]["project_id"],
+        )
+
+    # Check if we successfully got a client
+    if storage_client is None:
+        raise Exception("No valid credentials found")
+
+    # Initialize bucket
+    bucket_name = "wedding-venues-001"
+    bucket = storage_client.bucket(bucket_name)
+
+except Exception as e:
+    print(f"Error initializing Google Cloud Storage: {str(e)}")
+    raise
 
 
 def list_files(filter=None):
     if filter is not None:
         filter = re.compile(filter, re.IGNORECASE)
 
-    client = storage.Client()
-    bucket = client.bucket(BUCKET_NAME)
+    # client = storage.Client()
+    # bucket = client.bucket(bucket_name)
     blobs = bucket.list_blobs()
     return [blob.name for blob in blobs if filter is None or filter.search(blob.name)]
 
@@ -27,9 +58,9 @@ def download_file(source_blob_name: str, destination_file_name: str):
     destination_file_name = Path(destination_file_name).as_posix()
     os.makedirs(os.path.dirname(destination_file_name), exist_ok=True)
     # source_blob_name.replace("//", "/")
-    source_blob_name = source_blob_name.strip("/").replace("//", "/")
-    client = storage.Client()
-    bucket = client.bucket(BUCKET_NAME)
+    # source_blob_name = source_blob_name.strip("/").replace("//", "/")
+    # client = storage.Client()
+    # bucket = client.bucket(bucket_name)
     blob = bucket.blob(source_blob_name)
 
     blob.download_to_filename(destination_file_name)
@@ -39,8 +70,8 @@ def download_file(source_blob_name: str, destination_file_name: str):
 def download_files(
     files: list[str], destination_files: list[str] | None = None, verbose=False
 ):
-    client = Client()
-    bucket = client.bucket(BUCKET_NAME)
+    # client = Client()
+    # bucket = client.bucket(bucket_name)
 
     if destination_files is None:
         destination_files = files
@@ -82,8 +113,8 @@ def upload_file(source_file_path: str, destination_blob_name: str | None = None)
     if destination_blob_name is None:
         destination_blob_name = Path(source_file_path).name
 
-    client = storage.Client()
-    bucket = client.bucket(BUCKET_NAME)
+    # client = storage.Client()
+    # bucket = client.bucket(BUCKET_NAME)
     blob = bucket.blob(destination_blob_name)
 
     blob.upload_from_filename(source_file_path)
@@ -105,8 +136,8 @@ def upload_files(file_pairs: list[tuple[str, str]]) -> list[str]:
     list[str]
         List of public URLs for the uploaded files
     """
-    client = Client()
-    bucket = client.bucket(BUCKET_NAME)
+    # client = Client()
+    # bucket = client.bucket(BUCKET_NAME)
 
     # Create list of (source_file, destination_blob) tuples
     uploads = [
@@ -121,34 +152,6 @@ def upload_files(file_pairs: list[tuple[str, str]]) -> list[str]:
 
     # Return public URLs of uploaded files
     return [blob.public_url for _, blob in uploads]
-
-
-# def upload_directory(local_directory: str, bucket_prefix: str = "") -> list[str]:
-#     """
-#     Upload an entire directory and its contents recursively.
-
-#     Parameters
-#     ----------
-#     local_directory : str
-#         Path to local directory to upload
-#     bucket_prefix : str, optional
-#         Prefix to add to all files in the bucket
-
-#     Returns
-#     -------
-#     list[str]
-#         List of public URLs for all uploaded files
-#     """
-#     local_dir = Path(local_directory)
-
-#     # Get all files in directory and subdirectories
-#     all_files = [
-#         (str(path), os.path.join(bucket_prefix, path.relative_to(local_dir).as_posix()))
-#         for path in local_dir.rglob("*")
-#         if path.is_file()
-#     ]
-
-#     return upload_files(all_files)
 
 
 def upload_directory(local_directory: str, bucket_prefix: str = "") -> list[str]:
@@ -168,8 +171,8 @@ def upload_directory(local_directory: str, bucket_prefix: str = "") -> list[str]
         List of public URLs for all uploaded files
     """
     local_dir = Path(local_directory)
-    storage_client = storage.Client()
-    bucket = storage_client.bucket(BUCKET_NAME)
+    # storage_client = storage.Client()
+    # bucket = storage_client.bucket(BUCKET_NAME)
 
     # Get all local files
     all_files = [
@@ -209,47 +212,14 @@ def delete_file(blob_name: str) -> bool:
         True if deletion was successful, False otherwise
     """
     try:
-        client = storage.Client()
-        bucket = client.bucket(BUCKET_NAME)
+        # client = storage.Client()
+        # bucket = client.bucket(BUCKET_NAME)
         blob = bucket.blob(blob_name)
         blob.delete()
         return True
     except Exception as e:
         print(f"Error deleting file {blob_name}: {str(e)}")
         return False
-
-
-# def download_directory(venue: str, local_path: str) -> None:
-#     """
-#     Downloads the adobe-extracted directory for a specific venue from Google Cloud Storage.
-#     """
-#     storage_client = storage.Client()
-#     bucket = storage_client.bucket(BUCKET_NAME)
-
-#     # List all files in the venue's directory
-#     files = list_files(f"processed/adobe-extracted/{venue}/")
-
-#     if not files:
-#         print(f"No files found for venue {venue}")
-#         return
-
-#     downloads = [
-#         (
-#             bucket.blob(file_name),
-#             os.path.join(
-#                 local_path, file_name.split(f"processed/adobe-extracted/{venue}/")[1]
-#             ),
-#         )
-#         for file_name in files
-#     ]
-
-#     for _, dest_path in downloads:
-#         os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-
-#     results = transfer_manager.download_many(downloads, max_workers=10)
-#     print(f"Downloaded {len(files)} files for {venue}")
-
-#     return results
 
 
 def download_directory(venue: str, target_dir: str, verbose: bool = False) -> List[str]:
@@ -269,8 +239,8 @@ def download_directory(venue: str, target_dir: str, verbose: bool = False) -> Li
     List[str]
         List of downloaded file paths
     """
-    storage_client = storage.Client()
-    bucket = storage_client.bucket("wedding-venues-001")
+    # storage_client = storage.Client()
+    # bucket = storage_client.bucket("wedding-venues-001")
     prefix = f"processed/adobe_extracted/{venue}/"
 
     print(f"Using prefix: {prefix}")
@@ -291,22 +261,6 @@ def download_directory(venue: str, target_dir: str, verbose: bool = False) -> Li
     ]
     downloaded_files = []
     download_files(blob_names, target_blob_names, verbose=verbose)
-    # for blob in blobs:
-    #     try:
-    #         # Construct local file path
-    #         local_path = os.path.join(os.getcwd(), blob.name)
-    #         # print(f"Processing blob: {blob.name}")
-    #         # print(f"Saving to: {local_path}")
-
-    #         # Create necessary directories
-    #         os.makedirs(os.path.dirname(local_path), exist_ok=True)
-
-    #         # Download the file
-    #         blob.download_to_filename(local_path)
-    #         downloaded_files.append(local_path)
-
-    #     except Exception as e:
-    #         print(f"Error downloading {blob.name}: {str(e)}")
 
     print(f"Successfully downloaded {len(downloaded_files)} files for venue {venue}")
     return downloaded_files
