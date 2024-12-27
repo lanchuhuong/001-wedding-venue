@@ -127,7 +127,7 @@ def initialize_retriever() -> MultiVectorRetriever:
 
 
 def initialize_retriever_from_disk():
-    vectorstore = initialize_database(from_cloud=False)
+    vectorstore = initialize_database()
     retriever = _initialize_retriever(vectorstore)
     return retriever
 
