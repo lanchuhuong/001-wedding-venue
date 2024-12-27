@@ -22,7 +22,7 @@ try:
     storage_client = None
 
     # For local development and github actions
-    if not STREAMLIT_AVAILABLE or os.path.exists(
+    if (not STREAMLIT_AVAILABLE) or os.path.exists(
         "turing-guard-444623-s7-2cd0a98f8177.json"
     ):
         storage_client = storage.Client()
