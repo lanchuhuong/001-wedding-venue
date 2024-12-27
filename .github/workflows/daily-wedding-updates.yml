@@ -168,7 +168,7 @@ jobs:
           sudo apt-get install -y tesseract-ocr
           python -m pip install --upgrade pip
           pip install google-cloud-storage python-dotenv
-          pip install -r requirements.txt
+          pip install -r requirements-pipeline.txt
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v1
@@ -210,7 +210,7 @@ jobs:
           sudo apt-get install -y tesseract-ocr
           python -m pip install --upgrade pip
           pip install google-cloud-storage python-dotenv
-          pip install -r requirements.txt
+          pip install -r requirements-pipeline.txt
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v1
