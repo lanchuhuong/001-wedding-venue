@@ -12,7 +12,7 @@ def get_llm_response(
 ) -> Iterator[str]:
     """Generate a response using GPT-4 based on the retrieved context"""
     llm = ChatOpenAI(
-        model="gpt-4o-mini",
+        model="gpt-4o",
         temperature=0,
         api_key=st.session_state.OPENAI_API_KEY,
         seed=123456,
