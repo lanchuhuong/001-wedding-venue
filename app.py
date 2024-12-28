@@ -8,7 +8,7 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 from tempfile import TemporaryDirectory
-from typing import Any, Dict, List
+from typing import Any, List
 
 import pandas as pd
 import streamlit as st

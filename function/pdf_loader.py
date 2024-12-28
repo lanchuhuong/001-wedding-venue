@@ -50,17 +50,6 @@ def get_dict_xlsx(outputzipextract, xlsx_file):
     return data_dict
 
 
-class Secrets:
-    def __getattribute__(self, name: str) -> SecretStr:
-        secret = os.getenv(name)
-        if secret is None:
-            raise ValueError(f"Secret {name} not found in environment variables")
-        return SecretStr(secret)
-
-
-secrets = Secrets()
-
-
 # adopted from: https://github.com/adobe/pdfservices-python-sdk-samples/blob/main/src/extractpdf/extract_text_table_info_with_figures_tables_renditions_from_pdf.py
 def adobeLoader(input_pdf, output_zip_path):
     """

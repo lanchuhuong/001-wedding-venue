@@ -1,33 +1,12 @@
 
 __pycache__
 .cache_ggshield
-.condaenv
 .DS_Store
-.env
 .env
 .ipynb_checkpoints
 .venv
 .vscode
 *.pyc
 *.Zone.Identifier
-*/turing-guard-444623-s7-2cd0a98f8177.json
-credentials.json
-data/
-data/processed
-data/processed/adobe_result
-data/raw
-data/raw/Southern California Wedding Venues
-notebooks/**/
-notebooks/parsing_images.ipynb
-notebooks/processed
-notebooks/data/processed/adobeloader_result
-notebooks/venues
-pdfs
-processed/
-Southern California Wedding Venues
-turing-guard-444623-s7-2cd0a98f8177.json
-venues
-venues_
+*.json
 faiss_db
-index.faiss
-index.pkl

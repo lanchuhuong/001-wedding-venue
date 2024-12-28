@@ -52,8 +52,7 @@ load_dotenv(override=True)
 
 path = find_dotenv()
 PROJECT_ROOT = os.path.dirname(path)
-PERSIST_DIRECTORY = os.path.join(PROJECT_ROOT, os.getenv("DATABASE_DIR"))
-PDF_PATH: Path = Path(PROJECT_ROOT) / Path(os.getenv("PDF_DIR"))
+PERSIST_DIRECTORY = os.path.join(PROJECT_ROOT, os.getenv("faiss_db"))
 
 
 try:
@@ -274,7 +273,6 @@ def update_retriever(retriever: MultiVectorRetriever, venue_metadata) -> None:
     add_pdfs_to_retriever(new_pdfs, retriever, venue_metadata)
     retriever.vectorstore.save_local(PERSIST_DIRECTORY)
     if new_pdfs or deleted_pdfs:
-        print(f"all pdfs in {PDF_PATH}: {all_companies}")
         print(f"all pdfs in database: {all_stored_companies}")
         print(f"new pdfs: {new_pdfs}")
         print(f"deleted pdfs: {deleted_pdfs}")

@@ -2,10 +2,8 @@ from __future__ import annotations
 
 import base64
 import functools
-import json
 import os
 import pickle
-import shutil
 import tempfile
 from mimetypes import guess_type
 from pathlib import Path
@@ -16,7 +14,6 @@ import numpy as np
 import pandas as pd
 import pytesseract
 
-# import streamlit as st
 from dotenv import load_dotenv
 from openai import OpenAI
 from PIL import Image
@@ -101,7 +98,6 @@ def predict_image_quality(model, properties: dict) -> bool:
     return bool(model.predict(X)[0])
 
 
-# @st.cache_data
 def is_photo(_model, image_path) -> bool:
     try:
         properties = image_properties(image_path)
@@ -161,11 +157,9 @@ def local_image_to_data_url(image_path: str) -> str:
     return f"data:{mime_type};base64,{base64_encoded_data}"
 
 
-# @st.cache_data
 def generate_image_descriptions(
     base_dir: str,
     venue: str,
-    # output_file: str = "description.json",
     model: str = "gpt-4o",
 ) -> list[dict[str, str]]:
     """
@@ -215,10 +209,8 @@ def generate_image_descriptions(
             print(f"Error processing image {image_path}: {e}")
             continue
 
-        output_image_dir = Path(os.getenv("OUTPUT_IMAGES_DIR")) / venue
-        # output_image_dir.mkdir(exist_ok=True)
+        output_image_dir = Path(".") / venue
         output_image_path = output_image_dir / image_file
-        # shutil.copy(image_path, output_image_path)
         image_description.append(
             {"image_path": str(output_image_path), "description": content}
         )
