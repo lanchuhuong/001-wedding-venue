@@ -9,9 +9,6 @@ jobs:
   validate-API-keys:
     runs-on: ubuntu-latest
     env:
-      PDF_DIR: ${{ vars.PDF_DIR }}
-      OUTPUT_IMAGES_DIR: ${{ vars.OUTPUT_IMAGES_DIR }}
-      DATABASE_DIR: ${{ vars.DATABASE_DIR }}
       ADOBE_CLIENT_ID: ${{ secrets.ADOBE_CLIENT_ID }}
       ADOBE_CLIENT_SECRET: ${{ secrets.ADOBE_CLIENT_SECRET }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
