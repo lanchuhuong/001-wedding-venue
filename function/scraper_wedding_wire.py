@@ -7,7 +7,6 @@ import time
 import urllib.parse
 
 import pandas as pd
-
 from dotenv import load_dotenv
 from google.cloud import storage
 from selenium import webdriver
@@ -180,11 +179,9 @@ def process_venues_and_photos(bucket_name):
                     print(f"✗ Failed to download {photo_col}")
                     results["failed"] += 1
 
-        # Save the updated tracker
         tracker.save_tracker()
 
     finally:
-        # Make sure we clean up the browser
         del downloader
 
     return results
