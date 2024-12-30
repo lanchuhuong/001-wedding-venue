@@ -1,12 +1,14 @@
 # Table of contents
 
 - [Set up for local development](#set-up-for-local-development)
-  - [Local development](#local-development)
-    - [Set up secrets](#set-up-secrets)
-- [Set up for Streamlit Cloud](#set-up-for-streamlit-cloud)
-  - [Streamlit Cloud](#streamlit-cloud)
-  - [Set up secrets](#set-up-secrets-1)
+- [OpenAI secret](#openai-secret)
+- [Adobe PDF Services secrets](#adobe-pdf-services-secrets)
+- [Google Cloud Storage secrets](#google-cloud-storage-secrets)
 - [Github secrets](#github-secrets)
+- [Streamlit Cloud](#streamlit-cloud)
+- [Google Cloud Storage](#google-cloud-storage)
+- [Updating the database](#updating-the-database)
+- [Quick links](#quick-links)
 
 # Set up for local development
 
@@ -40,15 +42,25 @@ ADOBE_CLIENT_SECRET=p9e-uF9zg...
 GOOGLE_APPLICATION_CREDENTIALS="/Users/bobby/Documents/001-wedding-venue/turing-guard-454623-t7-2ci0v965a132.json"
 ```
 
-#### OpenAI secret
+# OpenAI secret
 
 You can get an OpenAI API key from [here](https://platform.openai.com/api-keys).
 
-#### Adobe PDF Services secrets
+# Adobe PDF Services secrets
 
-You can get an Adobe PDF Services API key from [here](https://developer.adobe.com/console/services/pdfservices/overview).
+You can get an Adobe PDF Services API key from [here](https://acrobatservices.adobe.com/dc-integration-creation-app-cdn/main.html?api=pdf-extract-api).
 
-#### Google Cloud Storage secrets
+create credentials
+
+![alt text](readme_images/image-13.png)
+
+This will download a zip file containing a `pdfservices-api-credentials.json` file. 
+
+![alt text](readme_images/image-14.png)
+
+
+
+# Google Cloud Storage secrets
 
 create service account in Google Cloud Console
 
@@ -70,7 +82,7 @@ This will download a JSON file to your computer. Move this file to the root dire
 
 Then inside `.env`, set the `GOOGLE_APPLICATION_CREDENTIALS` to the path of the JSON file you just downloaded. 
 
-## Github secrets
+# Github secrets
 
 Go to the repository settings and click "Secrets and variables > Actions".
 
@@ -105,7 +117,7 @@ The first three are the same as the ones as described in the previous section. T
 }
 ```
 
-## Streamlit Cloud
+# Streamlit Cloud
 
 On Streamlit Cloud, you will have to set the openai key and google cloud credentials as secrets. After logging in, go to "My Apps", select the app, go to "Settings" and then "Secrets".
 
@@ -137,7 +149,39 @@ Under the `[gcp_service_account]` section, you again put in the contents of the 
 
 # Google Cloud Storage
 
-The vector database, PDFs, and images are stored in Google Cloud Storage in a bucket called `wedding-venues-001`. Every night at 03:00 AM (PST), a script is run on Github Actions that:
+The vector database, PDFs, and images are stored in Google Cloud Storage in a bucket called [wedding-venues-001](https://console.cloud.google.com/storage/browser/wedding-venues-001). 
+
+
+The structure is roughly:
+
+```
+wedding-venues-001/
+├── venues/
+│   ├── venue_1/
+│   │   ├── venue_1.pdf
+│   ├── venue_2/
+│   │   ├── venue_2.pdf
+│   ├── ...
+├── processed/
+│   ├── adobe_extracted/
+│   │   ├── venue_1/
+│   │   │   ├── figures/
+│   │   │   ├── tables/
+│   │   │   ├── structuredData.json
+│   │   ├── venue_2/
+│   │   │   ├── ...
+│   │   ├── ...
+│   ├── ...
+├── faiss_db/
+├── Wedding Venues.xlsx
+├── image_tracker.json
+```
+
+New PDFs are added to the `wedding-venues-001/venues` folder, and extra info (phone, address, website, new images) is added to the `Wedding Venues.xlsx` file. When processed, the extracted/downloaded information is stored in 'processed/' and in the vectore database (`faiss_db/`).
+
+# Updating the database
+
+Every night at 03:00 AM (PST), a script is run on Github Actions that:
 
 - Check for new PDFs in `wedding-venues-001/venues` and
   - Process them using Adobe PDF Services and store text, tables and images in `wedding-venues-001/processed/adobe_extracted/{venue}/...`
@@ -147,4 +191,28 @@ The vector database, PDFs, and images are stored in Google Cloud Storage in a bu
   - Store text, table, image data in vector database.
 - Check for removed PDFs in `wedding-venues-001/venues` and
   - Remove all related information from the vector database.
+
+Checking if everything is up to date takes a few minutes, and processing a single new PDF takes about a minute. 
+
+If something is updated, the streamlit app will reload and during a few minutes users cannot use the app. The database can also be updated sooner by manually running the Github Action:
+
+![alt text](readme_images/image-15.png)
+
+click "update wedding venue database"
+
+![alt text](readme_images/image-16.png)
+
+then click "Run workflow > Run workflow"
+
+![alt text](readme_images/image-17.png)
+
+After a few seconds, a new workflow will appear
+
+![alt text](readme_images/image-18.png)
+
+
+# Quick links
+
+- [Google Cloud Storage](https://console.cloud.google.com/storage/browser/wedding-venues-001)
+- [Streamlit Cloud](https://share.streamlit.io)
 
