@@ -21,6 +21,7 @@ def get_venue_images_from_cloud(venue):
 
 def get_all_venue_names_on_cloud():
     venue_paths = list_files(r"venues/.*")
+    venue_paths = [path for path in venue_paths if path.endswith(".pdf")]
     pattern = re.compile("venues/(.*)/.*.pdf")
     venue_names = [pattern.findall(path)[0] for path in venue_paths]
     return venue_names
@@ -47,6 +48,9 @@ def process_images(venue, temp_output_dir, receiver):
     images_not_in_receiver = []
     if len(cloud_images) > 0:
         root = os.path.dirname(cloud_images[0])
+        if root.startswith("/"):
+            root = root[1:]
+
         cloud_image_names = set([os.path.basename(image) for image in cloud_images])
         receiver_image_names = set(receiver_images)
         images_not_in_receiver = cloud_image_names - receiver_image_names
