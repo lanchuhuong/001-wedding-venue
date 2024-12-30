@@ -246,6 +246,7 @@ def remove_pdfs_from_retriever(
 
 def get_all_venue_names_on_cloud():
     venue_paths = list_files(r"venues/.*")
+    venue_paths = [path for path in venue_paths if path.endswith(".pdf")]
     pattern = re.compile("venues/(.*)/.*.pdf")
     venue_names = [pattern.findall(path)[0] for path in venue_paths]
     return venue_names
